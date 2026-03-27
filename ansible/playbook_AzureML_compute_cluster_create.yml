@@ -1,0 +1,66 @@
+- name: Azure ML Workspace - Create Compute Clusters
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    rg: "{{ resource_group_name }}"
+    ws: "{{ ml_workspace.name }}"
+
+    clusters:
+      - name: "f4s-v2-cpu-cluster"
+        size: "Standard_F4s_v2"   # standardFSv2Family,  4 cores, 8 GB RAM
+        max_instances: 4
+      - name: "d2as-v4-cpu-cluster"
+        size: "Standard_D2as_v4"  # standardDASv4Family, 2 cores, 8 GB RAM
+        max_instances: 2
+      - name: "e2s-v3-cpu-cluster"
+        size: "Standard_E2s_v3"   # standardESv3Family, 2 cores, 16 GB RAM
+        max_instances: 2
+      - name: "d2s-v3-cpu-cluster"
+        size: "Standard_D2s_v3"   # standardDSv3Family, 2 cores, 8 GB RAM
+        max_instances: 2
+
+    cluster_state: {}
+
+  tasks:
+
+    - name: Check if AML compute exists
+      command: >
+        az ml compute show -g {{ rg }} -w {{ ws }} -n {{ item.name }}
+      register: compute_check
+      changed_when: false
+      failed_when: false
+      loop: "{{ clusters }}"
+      loop_control:
+        loop_var: item
+
+    - name: Create AML compute if missing
+      command: >
+        az ml compute create
+        -g {{ rg }}
+        -w {{ ws }}
+        -n {{ item.item.name }}
+        --type amlcompute
+        --min-instances 0
+        --max-instances {{ item.item.max_instances }}
+        --size {{ item.item.size }}
+      when: item.rc != 0
+      loop: "{{ compute_check.results }}"
+      loop_control:
+        loop_var: item
+
+    - name: Build cluster state
+      set_fact:
+        cluster_state: >-
+          {{ cluster_state | combine({
+              'compute_cluster_' ~ (index + 1): item.name
+            }) }}
+      loop: "{{ clusters }}"
+      loop_control:
+        index_var: index
+        loop_var: item
+
+    - name: Save state file
+      copy:
+        dest: ./state/cluster_state.yml
+        content: "{{ cluster_state | to_nice_yaml }}"

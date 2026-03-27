@@ -1,0 +1,6 @@
+$schema: https://azuremlschemas.azureedge.net/latest/data.schema.json
+name: titanicdata
+version: 20260211004524
+type: mltable
+path: /home/kali/azure_auomation_dev/ansible/files/project-data/data-asset
+description: Titanic tabular dataset from projectdatastore (titanic.csv)

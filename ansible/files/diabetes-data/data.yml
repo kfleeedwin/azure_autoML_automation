@@ -1,0 +1,6 @@
+$schema: https://azuremlschemas.azureedge.net/latest/data.schema.json
+name: "diabetes_data"
+version: "1"
+type: mltable
+description: "Diabetes data from URI"
+path: .

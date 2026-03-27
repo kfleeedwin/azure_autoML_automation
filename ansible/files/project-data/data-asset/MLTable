@@ -1,0 +1,7 @@
+paths:
+   - file: azureml://subscriptions/REPLACE_WITH_SUBSCRIPTION_ID/resourcegroups/REPLACE_WITH_RESOURCE_GROUP/workspaces/REPLACE_WITH_WORKSPACE_NAME/datastores/projectdatastore/paths/projectdata/temperatures.csv
+transformations:
+  - read_delimited:
+      delimiter: ","
+      encoding: "utf8"
+      header: all_files_same_headers

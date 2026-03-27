@@ -1,0 +1,6 @@
+$schema: https://azuremlschemas.azureedge.net/latest/data.schema.json
+name: "penguin__data"
+version: "1"
+type: mltable
+description: "Penguin data from URI"
+path: .

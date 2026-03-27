@@ -1,0 +1,146 @@
+---
+- name: Azure ML - AutoML Classification (Diabetes)
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    rg: "{{ resource_group_name }}"
+    ws: "{{ ml_workspace.name }}"
+    compute_name: "{{ cluster_state.compute_cluster_1 }}"
+    data_asset_name: "diabetes-data"
+    experiment_name: "diabetes-exp-{{ lookup('pipe','date +%Y%m%d%H%M%S') }}"
+    job_name: "diabetes-job-{{ lookup('pipe','date +%Y%m%d%H%M%S') }}"
+    workdir: "./files/diabetes-data"
+    data_dir: "{{ workdir }}"
+    job_dir: "{{ workdir }}"
+
+  tasks:
+    - name: Load cluster state
+      set_fact:
+        cluster_state: "{{ lookup('file', './state/cluster_state.yml') | from_yaml }}"
+
+    - name: Ansible variables
+      debug:
+        msg:
+          - "Resource Group = {{ rg }}"
+          - "Work Space = {{ ws }}"
+
+    - name: Ensure directories exist
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ workdir }}"
+        - "{{ data_dir }}"
+        - "{{ job_dir }}"
+
+    - name: Verify diabetes.csv exists
+      stat:
+        path: "{{ data_dir }}/diabetes.csv"
+      register: diabetes_csv
+
+    - name: Fail if diabetes.csv missing
+      fail:
+        msg: "Missing {{ data_dir }}/diabetes.csv"
+      when: not diabetes_csv.stat.exists
+
+    - name: Verify MLTable exists
+      stat:
+        path: "{{ data_dir }}/MLTable"
+      register: mltable_file
+
+    - name: Fail if MLTable missing
+      fail:
+        msg: "Missing {{ data_dir }}/MLTable"
+      when: not mltable_file.stat.exists
+
+    - name: Set Azure ML defaults
+      command: >
+        az configure --defaults
+        group={{ rg }}
+        workspace={{ ws }}
+      changed_when: false
+    
+    - set_fact:
+        data_version: "{{ lookup('pipe','date +%Y%m%d%H%M%S') }}"
+
+    - name: Create MLTable data asset (diabetes-data)
+      command: >
+        az ml data create
+        --name {{ data_asset_name }}
+        --version {{data_version}}
+        --type mltable
+        --path {{ data_dir }}
+        --datastore workspaceblobstore
+        --description "Diabetes training dataset"
+      register: data_asset
+    #  failed_when: data_asset.rc != 0 and
+    #               ("already exists" not in data_asset.stderr | lower)
+
+    - name: Write AutoML job YAML
+      copy:
+        dest: "{{ job_dir }}/automl.yml"
+        mode: "0644"
+        content: |
+          $schema: https://azuremlschemas.azureedge.net/latest/autoMLClassificationJob.schema.json
+          type: automl
+
+          name: {{ job_name }}
+          experiment_name: {{ experiment_name }}
+
+          compute: azureml:{{ compute_name }}
+
+          task: classification
+          primary_metric: accuracy
+          
+          training_data:
+            type: mltable
+            path: azureml:{{ data_asset_name }}:{{ data_version }}
+
+          target_column_name: Diabetic
+
+          limits:
+            max_trials: 8
+            max_concurrent_trials: 2
+            timeout_minutes: 60
+            trial_timeout_minutes: 50
+            enable_early_termination: true
+
+          featurization:
+            mode: auto
+
+    - name: Submit AutoML job
+      command: >
+        az ml job create
+        --file {{ job_dir }}/automl.yml
+      register: job_submit
+
+    - name: Show job submit result
+      debug:
+        var: job_submit.stdout
+
+    - name: Capture submitted job name
+      set_fact:
+        submitted_job_name_1: "{{ (job_submit.stdout | from_json).name }}"
+
+    - debug:
+        msg: "Submitted job: {{ submitted_job_name_1 }}"
+    
+    - name: Load existing state file if present
+      set_fact:
+        aml_state: "{{ lookup('file', './state/aml_state.yml') | from_yaml }}"
+      ignore_errors: true
+
+    - name: Ensure aml_state exists
+      set_fact:
+        aml_state: "{{ aml_state | default({}) }}"
+
+    - name: Update state with new job name
+      set_fact:
+        aml_state: "{{ aml_state | combine({'submitted_job_name_1': submitted_job_name_1}) }}"
+
+    - name: Save state file
+      copy:
+        dest: ./state/aml_state.yml
+        content: "{{ aml_state | to_nice_yaml }}"

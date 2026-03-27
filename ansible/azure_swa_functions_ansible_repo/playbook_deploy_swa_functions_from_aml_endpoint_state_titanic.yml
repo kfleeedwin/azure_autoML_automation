@@ -1,0 +1,471 @@
+---
+- name: Deploy Azure Static Web App + linked Azure Function from AML endpoint state (titanic)
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    rg: "{{ resource_group_name }}"
+    location: "{{ azure_location | default('eastasia') }}"
+
+    # Azure resource names - pass these in via -e
+    swa_name: "{{ static_web_app_name }}"
+    function_app_name: "{{ azure_function_app_name }}"
+    storage_account_name: "{{ function_storage_account_name }}"
+
+    # Existing repo layout
+    state_dir: "./state"
+    endpoint_state_pattern: "online_endpoint*.yml"
+    frontend_build_root: "./files/swa_titanic_app/frontend"
+    function_build_root: "./files/swa_titanic_app/functionapp"
+    function_zip_path: "./files/swa_titanic_app/functionapp.zip"
+    webapp_state_file: "./state/static_web_app_titanic.yml"
+
+    # AML endpoint selection
+    aml_target_model_name: "{{ azure_ml_target_model_name | default('titanic-best-model') }}"
+    aml_target_endpoint_name: "{{ azure_ml_target_endpoint_name | default('') }}"
+
+    # Azure deployment defaults
+    swa_sku: "Standard"
+    function_runtime: "python"
+    function_runtime_version: "3.11"
+    function_version: "4"
+
+    # Frontend defaults
+    app_title: "{{ web_app_title | default('Titanic Survival Prediction Form') }}"
+    app_description: "{{ web_app_description | default('Submit passenger details to the linked Azure Function, which securely calls the Azure ML online endpoint.') }}"
+
+    # Function route name
+    function_route_name: "predict"
+
+  tasks:
+    - name: Validate required base variables
+      ansible.builtin.assert:
+        that:
+          - rg | length > 0
+          - location | length > 0
+          - swa_name | length > 0
+          - function_app_name | length > 0
+          - storage_account_name | length >= 3
+          - storage_account_name | length <= 24
+          - storage_account_name is match('^[a-z0-9]+$')
+        fail_msg: >-
+          Missing or invalid vars. Required: resource_group_name, static_web_app_name,
+          azure_function_app_name, function_storage_account_name. Storage account name must
+          be 3-24 chars, lowercase letters and digits only.
+
+    - name: Find AML online endpoint state files
+      ansible.builtin.find:
+        paths: "{{ state_dir }}"
+        patterns: "{{ endpoint_state_pattern }}"
+        file_type: file
+      register: endpoint_state_files
+
+    - name: Fail if no AML endpoint state files were found
+      ansible.builtin.fail:
+        msg: >-
+          No AML endpoint state files found under {{ state_dir }} matching {{ endpoint_state_pattern }}.
+          Expected files like ./state/online_endpoint_titanic.yml.
+      when: endpoint_state_files.files | length == 0
+
+    - name: Initialize merged AML endpoint state
+      ansible.builtin.set_fact:
+        merged_endpoint_state: {}
+
+    - name: Merge AML endpoint state files
+      ansible.builtin.set_fact:
+        merged_endpoint_state: >-
+          {{
+            merged_endpoint_state
+            | combine(lookup('file', item.path) | from_yaml, recursive=True)
+          }}
+      loop: "{{ endpoint_state_files.files | sort(attribute='path') }}"
+      loop_control:
+        label: "{{ item.path }}"
+      no_log: true
+
+    - name: Resolve AML endpoint candidate by endpoint name when provided
+      ansible.builtin.set_fact:
+        selected_aml_endpoint: >-
+          {{
+            {
+              'key': item.key,
+              'value': item.value
+            }
+          }}
+      loop: "{{ merged_endpoint_state | dict2items }}"
+      when:
+        - aml_target_endpoint_name | length > 0
+        - item.key == aml_target_endpoint_name
+      loop_control:
+        label: "{{ item.key }}"
+      no_log: true
+
+    - name: Resolve AML endpoint candidate by model name when endpoint name not provided
+      ansible.builtin.set_fact:
+        selected_aml_endpoint: >-
+          {{
+            {
+              'key': item.key,
+              'value': item.value
+            }
+          }}
+      loop: "{{ merged_endpoint_state | dict2items }}"
+      when:
+        - (aml_target_endpoint_name | length) == 0
+        - (item.value.model_name | default('')) == aml_target_model_name
+      loop_control:
+        label: "{{ item.key }}"
+      no_log: true
+
+    - name: Validate selected AML endpoint state
+      ansible.builtin.assert:
+        that:
+          - selected_aml_endpoint is defined
+          - selected_aml_endpoint.value is defined
+          - (selected_aml_endpoint.value.scoring_uri | default('')) | length > 0
+          - (selected_aml_endpoint.value.primary_key | default('')) | length > 0
+        fail_msg: >-
+          Could not resolve AML endpoint state. Tried endpoint_name='{{ aml_target_endpoint_name }}'
+          and model_name='{{ aml_target_model_name }}'. Ensure your ./state/online_endpoint*.yml
+          files contain scoring_uri and primary_key.
+      no_log: true
+
+    - name: Set AML connection facts from state
+      ansible.builtin.set_fact:
+        aml_endpoint_name: "{{ selected_aml_endpoint.key }}"
+        aml_model_name: "{{ selected_aml_endpoint.value.model_name | default('') }}"
+        aml_model_version: "{{ selected_aml_endpoint.value.model_version | default('') }}"
+        aml_scoring_uri: "{{ selected_aml_endpoint.value.scoring_uri }}"
+        aml_api_key: "{{ selected_aml_endpoint.value.primary_key }}"
+      no_log: true
+
+    - name: Ensure build directories exist in repo layout
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "./files"
+        - "./files/swa_titanic_app"
+        - "{{ frontend_build_root }}"
+        - "{{ function_build_root }}"
+
+    - name: Render Static Web App frontend files
+      ansible.builtin.template:
+        src: "templates/swa_titanic_app/frontend/{{ item.src }}"
+        dest: "{{ frontend_build_root }}/{{ item.dest }}"
+        mode: "0644"
+      loop:
+        - { src: "index.html.j2", dest: "index.html" }
+        - { src: "staticwebapp.config.json.j2", dest: "staticwebapp.config.json" }
+
+    - name: Render Azure Function app files
+      ansible.builtin.template:
+        src: "templates/swa_titanic_app/function/{{ item.src }}"
+        dest: "{{ function_build_root }}/{{ item.dest }}"
+        mode: "0644"
+      loop:
+        - { src: "function_app.py.j2", dest: "function_app.py" }
+        - { src: "host.json.j2", dest: "host.json" }
+        - { src: "requirements.txt.j2", dest: "requirements.txt" }
+
+    - name: Check Function storage account
+      ansible.builtin.command:
+        argv:
+          - az
+          - storage
+          - account
+          - show
+          - --resource-group
+          - "{{ rg }}"
+          - --name
+          - "{{ storage_account_name }}"
+          - -o
+          - json
+      register: storage_show
+      failed_when: false
+      changed_when: false
+
+    - name: Create Function storage account when missing
+      ansible.builtin.command:
+        argv:
+          - az
+          - storage
+          - account
+          - create
+          - --resource-group
+          - "{{ rg }}"
+          - --name
+          - "{{ storage_account_name }}"
+          - --location
+          - "{{ location }}"
+          - --sku
+          - Standard_LRS
+          - --kind
+          - StorageV2
+          - --allow-blob-public-access
+          - "false"
+          - -o
+          - json
+      when: storage_show.rc != 0
+      changed_when: true
+
+    - name: Check Azure Function App
+      ansible.builtin.command:
+        argv:
+          - az
+          - functionapp
+          - show
+          - --resource-group
+          - "{{ rg }}"
+          - --name
+          - "{{ function_app_name }}"
+          - -o
+          - json
+      register: function_show
+      failed_when: false
+      changed_when: false
+
+    - name: Create Linux Consumption Azure Function App when missing
+      ansible.builtin.command:
+        argv:
+          - az
+          - functionapp
+          - create
+          - --resource-group
+          - "{{ rg }}"
+          - --consumption-plan-location
+          - "{{ location }}"
+          - --name
+          - "{{ function_app_name }}"
+          - --storage-account
+          - "{{ storage_account_name }}"
+          - --os-type
+          - Linux
+          - --runtime
+          - "{{ function_runtime }}"
+          - --runtime-version
+          - "{{ function_runtime_version }}"
+          - --functions-version
+          - "{{ function_version }}"
+          - -o
+          - json
+      when: function_show.rc != 0
+      changed_when: true
+
+    - name: Configure Function App AML settings from endpoint state
+      ansible.builtin.command:
+        argv:
+          - az
+          - functionapp
+          - config
+          - appsettings
+          - set
+          - --resource-group
+          - "{{ rg }}"
+          - --name
+          - "{{ function_app_name }}"
+          - --settings
+          - "AML_SCORING_URI={{ aml_scoring_uri }}"
+          - "AML_API_KEY={{ aml_api_key }}"
+          - "AML_ENDPOINT_NAME={{ aml_endpoint_name }}"
+          - "AML_MODEL_NAME={{ aml_model_name }}"
+          - "AML_MODEL_VERSION={{ aml_model_version }}"
+      no_log: true
+      changed_when: false
+
+    - name: Remove old Function app zip
+      ansible.builtin.file:
+        path: "{{ function_zip_path }}"
+        state: absent
+
+    - name: Package Function app code
+      ansible.builtin.command: zip -rq ../{{ function_zip_path | basename }} .
+      args:
+        chdir: "{{ function_build_root }}"
+      changed_when: true
+
+    - name: Deploy Function app package by zip deploy
+      ansible.builtin.command:
+        argv:
+          - az
+          - functionapp
+          - deployment
+          - source
+          - config-zip
+          - --resource-group
+          - "{{ rg }}"
+          - --name
+          - "{{ function_app_name }}"
+          - --src
+          - "{{ function_zip_path }}"
+          - --build-remote
+          - "true"
+      changed_when: true
+
+    - name: Check Static Web App
+      ansible.builtin.command:
+        argv:
+          - az
+          - staticwebapp
+          - show
+          - --name
+          - "{{ swa_name }}"
+          - --resource-group
+          - "{{ rg }}"
+          - -o
+          - json
+      register: swa_show
+      failed_when: false
+      changed_when: false
+
+    - name: Create Static Web App without repo integration when missing
+      ansible.builtin.command:
+        argv:
+          - az
+          - staticwebapp
+          - create
+          - --name
+          - "{{ swa_name }}"
+          - --resource-group
+          - "{{ rg }}"
+          - --location
+          - "{{ location }}"
+          - --sku
+          - "{{ swa_sku }}"
+          - -o
+          - json
+      when: swa_show.rc != 0
+      changed_when: true
+
+    - name: Get Function App resource ID
+      ansible.builtin.command:
+        argv:
+          - az
+          - functionapp
+          - show
+          - --resource-group
+          - "{{ rg }}"
+          - --name
+          - "{{ function_app_name }}"
+          - --query
+          - id
+          - -o
+          - tsv
+      register: function_resource_id
+      changed_when: false
+
+    - name: Link Function App backend to Static Web App
+      ansible.builtin.command:
+        argv:
+          - az
+          - staticwebapp
+          - backends
+          - link
+          - --name
+          - "{{ swa_name }}"
+          - --resource-group
+          - "{{ rg }}"
+          - --backend-resource-id
+          - "{{ function_resource_id.stdout }}"
+          - --backend-region
+          - "{{ location }}"
+      changed_when: true
+
+    - name: Check SWA CLI installation
+      ansible.builtin.command:
+        argv:
+          - swa
+          - --version
+      register: swa_cli_version
+      failed_when: false
+      changed_when: false
+
+    - name: Install SWA CLI when missing
+      ansible.builtin.command:
+        argv:
+          - npm
+          - install
+          - -D
+          - '@azure/static-web-apps-cli@latest'
+      when: swa_cli_version.rc != 0
+      changed_when: true
+
+    - name: Get Static Web App deployment token
+      ansible.builtin.command:
+        argv:
+          - az
+          - staticwebapp
+          - secrets
+          - list
+          - --name
+          - "{{ swa_name }}"
+          - --resource-group
+          - "{{ rg }}"
+          - --query
+          - properties.apiKey
+          - -o
+          - tsv
+      register: swa_deployment_token
+      no_log: true
+      changed_when: false
+
+    - name: Deploy frontend to Azure Static Web Apps
+      ansible.builtin.command:
+        argv:
+          - npx
+          - "@azure/static-web-apps-cli"
+          - deploy
+          - "{{ frontend_build_root }}"
+          - --env
+          - production
+      environment:
+        SWA_CLI_DEPLOYMENT_TOKEN: "{{ swa_deployment_token.stdout }}"
+      no_log: true
+      changed_when: true
+
+    - name: Get Static Web App hostname
+      ansible.builtin.command:
+        argv:
+          - az
+          - staticwebapp
+          - show
+          - --name
+          - "{{ swa_name }}"
+          - --resource-group
+          - "{{ rg }}"
+          - --query
+          - defaultHostname
+          - -o
+          - tsv
+      register: swa_hostname
+      changed_when: false
+
+    - name: Build web app state map
+      ansible.builtin.set_fact:
+        static_web_app_state:
+          static_web_app_name: "{{ swa_name }}"
+          static_web_app_url: "https://{{ swa_hostname.stdout }}"
+          static_web_app_sku: "{{ swa_sku }}"
+          function_app_name: "{{ function_app_name }}"
+          function_api_url: "https://{{ swa_hostname.stdout }}/api/{{ function_route_name }}"
+          function_direct_url: "https://{{ function_app_name }}.azurewebsites.net/api/{{ function_route_name }}"
+          function_storage_account_name: "{{ storage_account_name }}"
+          aml_source_endpoint_name: "{{ aml_endpoint_name }}"
+          aml_source_model_name: "{{ aml_model_name }}"
+          aml_source_model_version: "{{ aml_model_version }}"
+          aml_source_scoring_uri: "{{ aml_scoring_uri }}"
+
+    - name: Write Static Web App state file
+      ansible.builtin.copy:
+        dest: "{{ webapp_state_file }}"
+        content: "{{ static_web_app_state | to_nice_yaml }}"
+        mode: "0600"
+
+    - name: Show deployment summary
+      ansible.builtin.debug:
+        msg:
+          - "Static Web App URL: https://{{ swa_hostname.stdout }}"
+          - "Form API URL: https://{{ swa_hostname.stdout }}/api/{{ function_route_name }}"
+          - "AML source endpoint: {{ aml_endpoint_name }}"
+          - "State file written: {{ webapp_state_file }}"

@@ -1,0 +1,88 @@
+---
+- name: Register best AutoML models from saved child run IDs
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    rg: "{{ resource_group_name }}"
+    ws: "{{ ml_workspace.name }}"
+    best_model_file: "./state/best_model.yml"
+    registered_models_file: "./state/registered_models.yml"
+
+  tasks:
+    - name: Load best model state
+      set_fact:
+        best_model_state: "{{ lookup('file', best_model_file) | from_yaml }}"
+
+    - name: Build list of best child runs
+      set_fact:
+        best_child_runs:
+          - { model_name: "diabetes-best-model", run_id: "{{ best_model_state.best_child_run_id_1 | default('') }}" }
+          - { model_name: "bike-rental-best-model", run_id: "{{ best_model_state.best_child_run_id_2 | default('') }}" }
+          - { model_name: "titanic-best-model", run_id: "{{ best_model_state.best_child_run_id_3 | default('') }}" }
+          - { model_name: "temp-forecast-best-model", run_id: "{{ best_model_state.best_child_run_id_4 | default('') }}" }
+
+    - name: Remove empty child runs
+      set_fact:
+        best_child_runs: "{{ best_child_runs | rejectattr('run_id', 'equalto', '') | list }}"
+
+    - name: Show child runs to register
+      debug:
+        var: best_child_runs
+
+    - name: Register model from best child run artifact path
+      command: >
+        az ml model create
+        --name {{ item.model_name }}
+        --path azureml://jobs/{{ item.run_id }}/outputs/artifacts/outputs/mlflow-model/
+        --type mlflow_model
+        --resource-group {{ rg }}
+        --workspace-name {{ ws }}
+        -o json
+      loop: "{{ best_child_runs }}"
+      register: model_register_raw
+      changed_when: true
+      loop_control:
+        label: "{{ item.model_name }} -> {{ item.run_id }}"
+
+    - name: Show registered model results
+      debug:
+        msg: "Registered {{ item.item.model_name }} from {{ item.item.run_id }}"
+      loop: "{{ model_register_raw.results }}"
+      loop_control:
+        label: "{{ item.item.model_name }}"
+
+    - name: Initialize registered models map
+      set_fact:
+        registered_models_map: {}
+
+    - name: Build registered models map
+      set_fact:
+        registered_models_map: >-
+          {{
+            registered_models_map | combine({
+              item.item.model_name: {
+                'run_id': item.item.run_id,
+                'model_name': item.item.model_name,
+                'model_version': (item.stdout | from_json).version,
+                'model_id': (item.stdout | from_json).id
+              }
+            })
+          }}
+      loop: "{{ model_register_raw.results }}"
+      loop_control:
+        label: "{{ item.item.model_name }}"
+
+    - name: Show registered models map
+      debug:
+        var: registered_models_map
+
+    - name: Write registered models state file
+      copy:
+        dest: "{{ registered_models_file }}"
+        content: "{{ registered_models_map | to_nice_yaml }}"
+        mode: "0644"
+
+    - name: Confirm registered models state file
+      debug:
+        msg: "Registered models written to {{ registered_models_file }}"

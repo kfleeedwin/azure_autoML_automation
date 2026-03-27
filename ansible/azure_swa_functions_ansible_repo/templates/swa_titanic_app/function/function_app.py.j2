@@ -1,0 +1,216 @@
+import json
+import logging
+import os
+from typing import Any
+
+import azure.functions as func
+import requests
+
+app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
+
+AML_SCORING_URI = os.getenv("AML_SCORING_URI", "")
+AML_API_KEY = os.getenv("AML_API_KEY", "")
+
+TITANIC_COLUMNS = [
+    "PassengerId",
+    "Pclass",
+    "Name",
+    "Sex",
+    "Age",
+    "SibSp",
+    "Parch",
+    "Ticket",
+    "Fare",
+    "Cabin",
+    "Embarked",
+]
+
+
+def _as_int(value: Any, field_name: str):
+    if value in ("", None):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"Field '{field_name}' must be an integer.")
+
+
+def _as_float(value: Any, field_name: str):
+    if value in ("", None):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"Field '{field_name}' must be a number.")
+
+
+def _as_str(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+def _normalize_prediction(raw: Any) -> bool:
+    candidate = raw
+
+    if isinstance(candidate, dict):
+        for key in ["prediction", "predictions", "result", "output", "data"]:
+            if key in candidate:
+                candidate = candidate[key]
+                break
+
+    while isinstance(candidate, list) and len(candidate) > 0:
+        candidate = candidate[0]
+
+    if isinstance(candidate, dict):
+        for key in ["prediction", "predicted_label", "label", "value", "result"]:
+            if key in candidate:
+                candidate = candidate[key]
+                break
+
+    if isinstance(candidate, bool):
+        return candidate
+
+    if isinstance(candidate, (int, float)):
+        return bool(int(candidate))
+
+    if isinstance(candidate, str):
+        lowered = candidate.strip().lower()
+        if lowered in ["true", "1", "yes", "survived"]:
+            return True
+        if lowered in ["false", "0", "no", "not survived", "did not survive", "died"]:
+            return False
+
+    raise ValueError(f"Unable to normalize prediction from AML response: {raw}")
+
+
+@app.route(route="{{ function_route_name }}", methods=["POST"])
+def predict(req: func.HttpRequest) -> func.HttpResponse:
+    logging.info("Titanic prediction request received.")
+
+    if not AML_SCORING_URI or not AML_API_KEY:
+        return func.HttpResponse(
+            json.dumps(
+                {
+                    "error": "AML endpoint configuration missing. Set AML_SCORING_URI and AML_API_KEY."
+                }
+            ),
+            status_code=500,
+            mimetype="application/json",
+        )
+
+    try:
+        body = req.get_json()
+    except ValueError:
+        return func.HttpResponse(
+            json.dumps({"error": "Invalid JSON body."}),
+            status_code=400,
+            mimetype="application/json",
+        )
+
+    try:
+        row = [
+            _as_int(body.get("PassengerId"), "PassengerId"),
+            _as_int(body.get("Pclass"), "Pclass"),
+            _as_str(body.get("Name")),
+            _as_str(body.get("Sex")),
+            _as_float(body.get("Age"), "Age"),
+            _as_int(body.get("SibSp"), "SibSp"),
+            _as_int(body.get("Parch"), "Parch"),
+            _as_str(body.get("Ticket")),
+            _as_float(body.get("Fare"), "Fare"),
+            _as_str(body.get("Cabin")),
+            _as_str(body.get("Embarked")),
+        ]
+
+        aml_payload = {
+            "input_data": {
+                "columns": TITANIC_COLUMNS,
+                "index": [0],
+                "data": [row],
+            }
+        }
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {AML_API_KEY}",
+        }
+
+        aml_response = requests.post(
+            AML_SCORING_URI,
+            headers=headers,
+            json=aml_payload,
+            timeout=60,
+        )
+
+        aml_text = aml_response.text
+
+        if aml_response.status_code >= 400:
+            logging.error("AML endpoint error: %s", aml_text)
+            return func.HttpResponse(
+                json.dumps(
+                    {
+                        "error": "Azure ML endpoint call failed.",
+                        "status_code": aml_response.status_code,
+                        "details": aml_text,
+                    }
+                ),
+                status_code=502,
+                mimetype="application/json",
+            )
+
+        try:
+            aml_json = aml_response.json()
+        except ValueError:
+            return func.HttpResponse(
+                json.dumps(
+                    {
+                        "error": "AML endpoint returned non-JSON response.",
+                        "details": aml_text,
+                    }
+                ),
+                status_code=502,
+                mimetype="application/json",
+            )
+
+        prediction_bool = _normalize_prediction(aml_json)
+
+        result = {
+            "prediction": prediction_bool,
+            "label": "true" if prediction_bool else "false",
+            "human_readable": "Likely survived" if prediction_bool else "Likely did not survive",
+            "message": "Prediction returned from Azure ML endpoint.",
+            "raw_response": aml_json,
+        }
+
+        return func.HttpResponse(
+            json.dumps(result),
+            status_code=200,
+            mimetype="application/json",
+        )
+
+    except ValueError as exc:
+        return func.HttpResponse(
+            json.dumps({"error": str(exc)}),
+            status_code=400,
+            mimetype="application/json",
+        )
+    except requests.RequestException as exc:
+        logging.exception("Request to AML endpoint failed.")
+        return func.HttpResponse(
+            json.dumps(
+                {
+                    "error": "Network error while calling Azure ML endpoint.",
+                    "details": str(exc),
+                }
+            ),
+            status_code=502,
+            mimetype="application/json",
+        )
+    except Exception as exc:
+        logging.exception("Unhandled server error.")
+        return func.HttpResponse(
+            json.dumps({"error": "Unhandled server error.", "details": str(exc)}),
+            status_code=500,
+            mimetype="application/json",
+        )

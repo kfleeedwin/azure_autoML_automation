@@ -1,0 +1,42 @@
+# Terraform
+**/.terraform/
+**/*.tfstate
+**/*.tfstate.*
+**/terraform.tfvars
+**/*.tfvars
+**/*.tfvars.json
+**/crash.log
+**/crash.*.log
+**/.terraform.lock.hcl
+
+# Ansible
+**/*.retry
+**/.ansible/
+**/state/
+**/group_vars/all/tf.yml
+**/files/postman/.env
+
+# Python
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/.coverage
+**/.coverage.*
+**/.venv/
+**/venv/
+
+# Local env / OS
+**/.env
+**/.env.*
+!**/.env.example
+**/.python-version
+**/.envrc
+**/.DS_Store
+**/.vscode/
+**/node_modules/
+**/*.zip
+**/*.log
+
+# Reports / generated artifacts
+**/*.pdf
+**/*.tsv

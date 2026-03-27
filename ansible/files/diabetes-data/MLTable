@@ -1,0 +1,7 @@
+paths:
+  - file: "https://raw.githubusercontent.com/MicrosoftLearning/mslearn-azure-ml/main/Labs/02/src/diabetes.csv"
+transformations:
+  - read_delimited:
+      delimiter: ","
+      encoding: "utf8"
+      header: from_first_file

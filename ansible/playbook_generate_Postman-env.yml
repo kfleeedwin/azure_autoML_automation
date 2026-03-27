@@ -1,0 +1,47 @@
+- name: Create Postman env for AutoML testing
+  hosts: local
+  gather_facts: false
+
+  vars:
+    env_file: "./files/postman/.env"
+
+  tasks:
+
+    - name: Find endpoint state files
+      find:
+        paths: "./state"
+        patterns: "online_endpoint*.yml"
+        file_type: file
+      register: endpoint_state_files
+
+    - name: Initialize merged endpoint state
+      set_fact:
+        merged_endpoint_state: {}
+
+    - name: Merge endpoint state files
+      set_fact:
+        merged_endpoint_state: >-
+          {{
+            merged_endpoint_state
+            | combine(lookup('file', item.path) | from_yaml, recursive=True)
+          }}
+      loop: "{{ endpoint_state_files.files | sort(attribute='path') }}"
+      no_log: true
+
+    - name: Build .env content
+      set_fact:
+        postman_env_content: |
+          {% for item in merged_endpoint_state | dict2items %}
+          {% set short = (item.value.model_name | default(item.key) | regex_replace('-best-model$', '') | regex_replace('[^A-Za-z0-9]', '') | lower) %}
+          endpoint_uri_{{ short }}={{ item.value.scoring_uri | default('') }}
+          primary_key_{{ short }}={{ item.value.primary_key | default('') }}
+
+          {% endfor %}
+      no_log: true
+
+    - name: Write Postman .env file
+      copy:
+        dest: "{{ env_file }}"
+        content: "{{ postman_env_content }}"
+        mode: "0600"
+      no_log: true

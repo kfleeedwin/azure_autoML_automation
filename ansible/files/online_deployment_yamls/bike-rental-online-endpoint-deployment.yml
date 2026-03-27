@@ -1,0 +1,6 @@
+$schema: https://azuremlschemas.azureedge.net/latest/managedOnlineDeployment.schema.json
+name: blue
+endpoint_name: bike-rental-online-endpoint
+model: azureml:bike-rental-best-model:1
+instance_type: Standard_F2s_v2
+instance_count: 1

@@ -1,0 +1,37 @@
+$schema: https://azuremlschemas.azureedge.net/latest/autoMLJob.schema.json
+type: automl
+
+name: bike-rental-job-20260320043923
+display_name: bike-rental-job-20260320043923
+experiment_name: bike-rental-exp-20260320043923
+
+task: regression
+primary_metric: normalized_root_mean_squared_error
+target_column_name: rentals
+
+training_data:
+  path: azureml:bike-rental-data:20260320043910
+  type: mltable
+
+validation_data_size: 0.1
+
+featurization: 
+  mode: auto
+
+training:
+   allowed_training_algorithms:
+     - RandomForest
+     - LightGBM
+
+   enable_model_explainability: false     
+   enable_stack_ensemble: false
+   enable_vote_ensemble: false
+
+limits:
+  max_trials: 4
+  max_concurrent_trials: 1
+  timeout_minutes: 60
+  trial_timeout_minutes: 50
+  enable_early_termination: true
+
+compute: azureml:d2as-v4-cpu-cluster

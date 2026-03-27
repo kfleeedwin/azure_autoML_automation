@@ -1,0 +1,6 @@
+$schema: https://azuremlschemas.azureedge.net/latest/managedOnlineDeployment.schema.json
+name: blue
+endpoint_name: titanic-online-endpoint
+model: azureml:titanic-best-model:1
+instance_type: Standard_E2s_v3
+instance_count: 1

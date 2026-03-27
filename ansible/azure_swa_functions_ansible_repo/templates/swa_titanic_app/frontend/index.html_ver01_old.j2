@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{ app_title }}</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #121933;
+      --panel-2: #1a2345;
+      --text: #e8ecff;
+      --muted: #98a2c3;
+      --accent: #4cc9f0;
+      --accent-2: #7b61ff;
+      --success: #19c37d;
+      --danger: #ff5d73;
+      --border: rgba(255,255,255,0.08);
+      --shadow: 0 20px 60px rgba(0,0,0,0.35);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(76, 201, 240, 0.12), transparent 25%),
+        radial-gradient(circle at top right, rgba(123, 97, 255, 0.12), transparent 25%),
+        var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 32px 16px;
+    }
+
+    .container {
+      max-width: 1150px;
+      margin: 0 auto;
+    }
+
+    .hero {
+      margin-bottom: 24px;
+    }
+
+    .hero h1 {
+      margin: 0 0 8px 0;
+      font-size: 2rem;
+      line-height: 1.2;
+    }
+
+    .hero p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 1rem;
+      line-height: 1.5;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1.5fr 1fr;
+      gap: 24px;
+    }
+
+    .card {
+      background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .panel {
+      padding: 24px;
+      background: var(--panel);
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .field.full {
+      grid-column: 1 / -1;
+    }
+
+    label {
+      font-size: 0.92rem;
+      color: var(--muted);
+    }
+
+    input, select {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: var(--panel-2);
+      color: var(--text);
+      outline: none;
+    }
+
+    input:focus, select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(76, 201, 240, 0.15);
+    }
+
+    .actions {
+      margin-top: 20px;
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    button {
+      border: 0;
+      border-radius: 12px;
+      padding: 12px 18px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    .btn-primary {
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      color: #08101f;
+    }
+
+    .btn-secondary {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .status {
+      margin-top: 16px;
+      color: var(--muted);
+      min-height: 22px;
+    }
+
+    .result-box {
+      margin-top: 18px;
+      padding: 20px;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      background: var(--panel-2);
+      display: none;
+    }
+
+    .result-label {
+      font-size: 0.95rem;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    .result-value {
+      font-size: 2rem;
+      font-weight: bold;
+      margin-bottom: 10px;
+    }
+
+    .result-human {
+      font-size: 1rem;
+      margin-bottom: 8px;
+    }
+
+    .result-meta {
+      color: var(--muted);
+      font-size: 0.9rem;
+      line-height: 1.5;
+      word-break: break-word;
+    }
+
+    .true-result {
+      border-color: rgba(25, 195, 125, 0.35);
+      box-shadow: 0 0 0 3px rgba(25, 195, 125, 0.08) inset;
+    }
+
+    .false-result {
+      border-color: rgba(255, 93, 115, 0.35);
+      box-shadow: 0 0 0 3px rgba(255, 93, 115, 0.08) inset;
+    }
+
+    .tips {
+      margin-top: 14px;
+      color: var(--muted);
+      font-size: 0.92rem;
+      line-height: 1.6;
+    }
+
+    code {
+      background: rgba(255,255,255,0.06);
+      padding: 2px 6px;
+      border-radius: 6px;
+    }
+
+    @media (max-width: 900px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
+      .form-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="hero">
+      <h1>{{ app_title }}</h1>
+      <p>{{ app_description }}</p>
+    </div>
+
+    <div class="grid">
+      <div class="card panel">
+        <form id="predictionForm">
+          <div class="form-grid">
+            <div class="field">
+              <label for="PassengerId">PassengerId</label>
+              <input type="number" id="PassengerId" name="PassengerId" required />
+            </div>
+
+            <div class="field">
+              <label for="Pclass">Pclass</label>
+              <select id="Pclass" name="Pclass" required>
+                <option value="">Select class</option>
+                <option value="1">1 - First Class</option>
+                <option value="2">2 - Second Class</option>
+                <option value="3">3 - Third Class</option>
+              </select>
+            </div>
+
+            <div class="field full">
+              <label for="Name">Name</label>
+              <input type="text" id="Name" name="Name" required />
+            </div>
+
+            <div class="field">
+              <label for="Sex">Sex</label>
+              <select id="Sex" name="Sex" required>
+                <option value="">Select sex</option>
+                <option value="male">male</option>
+                <option value="female">female</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="Age">Age</label>
+              <input type="number" step="0.1" id="Age" name="Age" />
+            </div>
+
+            <div class="field">
+              <label for="SibSp">SibSp</label>
+              <input type="number" id="SibSp" name="SibSp" required />
+            </div>
+
+            <div class="field">
+              <label for="Parch">Parch</label>
+              <input type="number" id="Parch" name="Parch" required />
+            </div>
+
+            <div class="field">
+              <label for="Ticket">Ticket</label>
+              <input type="text" id="Ticket" name="Ticket" required />
+            </div>
+
+            <div class="field">
+              <label for="Fare">Fare</label>
+              <input type="number" step="0.01" id="Fare" name="Fare" />
+            </div>
+
+            <div class="field">
+              <label for="Cabin">Cabin</label>
+              <input type="text" id="Cabin" name="Cabin" />
+            </div>
+
+            <div class="field">
+              <label for="Embarked">Embarked</label>
+              <select id="Embarked" name="Embarked">
+                <option value="">Select port</option>
+                <option value="C">C</option>
+                <option value="Q">Q</option>
+                <option value="S">S</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="actions">
+            <button type="submit" class="btn-primary">Predict</button>
+            <button type="button" class="btn-secondary" id="fillDemoBtn">Fill Demo Data</button>
+            <button type="reset" class="btn-secondary">Reset</button>
+          </div>
+
+          <div class="status" id="statusText"></div>
+        </form>
+      </div>
+
+      <div class="card panel">
+        <h2 style="margin-top: 0;">Prediction Result</h2>
+        <p style="color: var(--muted); margin-top: 0; line-height: 1.5;">
+          The frontend posts to <code>/api/{{ function_route_name }}</code>. The linked Azure Function converts the form data into the AML payload, calls the deployed Titanic endpoint, and returns a normalized boolean result.
+        </p>
+
+        <div id="resultBox" class="result-box">
+          <div class="result-label">Boolean Result</div>
+          <div id="resultValue" class="result-value">-</div>
+          <div id="resultHuman" class="result-human"></div>
+          <div id="resultMeta" class="result-meta"></div>
+        </div>
+
+        <div class="tips">
+          <strong>Expected meaning:</strong> <code>true</code> = survived, <code>false</code> = did not survive.<br>
+          If your endpoint returns a custom schema, update the normalization logic in <code>function_app.py.j2</code>.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const form = document.getElementById("predictionForm");
+    const statusText = document.getElementById("statusText");
+    const resultBox = document.getElementById("resultBox");
+    const resultValue = document.getElementById("resultValue");
+    const resultHuman = document.getElementById("resultHuman");
+    const resultMeta = document.getElementById("resultMeta");
+    const fillDemoBtn = document.getElementById("fillDemoBtn");
+
+    function getNumberOrNull(id) {
+      const value = document.getElementById(id).value.trim();
+      return value === "" ? null : Number(value);
+    }
+
+    function getStringOrEmpty(id) {
+      return document.getElementById(id).value.trim();
+    }
+
+    function setStatus(message, isError = false) {
+      statusText.textContent = message;
+      statusText.style.color = isError ? "#ff5d73" : "#98a2c3";
+    }
+
+    function renderResult(data) {
+      resultBox.style.display = "block";
+      resultBox.classList.remove("true-result", "false-result");
+
+      const prediction = Boolean(data.prediction);
+      resultValue.textContent = prediction ? "true" : "false";
+      resultHuman.textContent = data.human_readable || (prediction ? "Likely survived" : "Likely did not survive");
+      resultMeta.textContent = data.message || "Prediction completed successfully.";
+
+      if (prediction) {
+        resultBox.classList.add("true-result");
+      } else {
+        resultBox.classList.add("false-result");
+      }
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      setStatus("Submitting request to Function API...");
+
+      const payload = {
+        PassengerId: getNumberOrNull("PassengerId"),
+        Pclass: getNumberOrNull("Pclass"),
+        Name: getStringOrEmpty("Name"),
+        Sex: getStringOrEmpty("Sex"),
+        Age: getNumberOrNull("Age"),
+        SibSp: getNumberOrNull("SibSp"),
+        Parch: getNumberOrNull("Parch"),
+        Ticket: getStringOrEmpty("Ticket"),
+        Fare: getNumberOrNull("Fare"),
+        Cabin: getStringOrEmpty("Cabin"),
+        Embarked: getStringOrEmpty("Embarked")
+      };
+
+      try {
+        const response = await fetch("/api/{{ function_route_name }}", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || "Prediction request failed.");
+        }
+
+        renderResult(data);
+        setStatus("Prediction completed.");
+      } catch (error) {
+        setStatus(error.message || "Unexpected error occurred.", true);
+      }
+    });
+
+    fillDemoBtn.addEventListener("click", () => {
+      document.getElementById("PassengerId").value = 1;
+      document.getElementById("Pclass").value = 3;
+      document.getElementById("Name").value = "Moran, Mr. James";
+      document.getElementById("Sex").value = "male";
+      document.getElementById("Age").value = 22;
+      document.getElementById("SibSp").value = 1;
+      document.getElementById("Parch").value = 0;
+      document.getElementById("Ticket").value = "330877";
+      document.getElementById("Fare").value = 7.25;
+      document.getElementById("Cabin").value = "";
+      document.getElementById("Embarked").value = "S";
+      setStatus("Demo data loaded.");
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{ app_title | default('Titanic Survival Prediction Form') }}</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.5.0/Chart.min.js"></script>
+  <style>
+    :root {
+      --bg-deep: #030b1c;
+      --bg-ocean: #061736;
+      --panel: rgba(8, 21, 49, 0.92);
+      --panel-strong: rgba(10, 27, 61, 0.96);
+      --panel-soft: rgba(16, 35, 74, 0.92);
+      --text: #f8fbff;
+      --muted: #b4c6e3;
+      --line: rgba(166, 201, 255, 0.16);
+      --line-strong: rgba(166, 201, 255, 0.28);
+      --gold: #d9b56d;
+      --ice: #7fd5ff;
+      --shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      min-height: 100%;
+      font-family: Arial, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(127, 213, 255, 0.14), transparent 24%),
+        radial-gradient(circle at top right, rgba(217, 181, 109, 0.10), transparent 20%),
+        linear-gradient(180deg, #031126 0%, #05142e 35%, #020814 100%);
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background:
+        linear-gradient(to bottom, rgba(255,255,255,0.05), transparent 20%),
+        repeating-linear-gradient(
+          180deg,
+          rgba(255,255,255,0.018) 0px,
+          rgba(255,255,255,0.018) 1px,
+          transparent 1px,
+          transparent 90px
+        );
+      opacity: 0.35;
+    }
+
+    .page-shell {
+      position: relative;
+      z-index: 1;
+      max-width: 1220px;
+      margin: 0 auto;
+      padding: 48px 20px 36px;
+    }
+
+    .hero {
+      margin-bottom: 28px;
+    }
+
+    .hero-badge {
+      display: inline-block;
+      margin-bottom: 14px;
+      padding: 7px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--line-strong);
+      background: rgba(10, 27, 61, 0.72);
+      color: var(--gold);
+      font-size: 0.82rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .hero h1 {
+      margin: 0 0 10px 0;
+      font-size: clamp(2rem, 4vw, 3.25rem);
+      line-height: 1.08;
+      letter-spacing: -0.03em;
+      text-shadow: 0 0 24px rgba(127, 213, 255, 0.08);
+    }
+
+    .hero p {
+      margin: 0;
+      max-width: 880px;
+      font-size: 1.05rem;
+      line-height: 1.7;
+      color: var(--muted);
+    }
+
+    .content-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.55fr) minmax(360px, 0.95fr);
+      gap: 24px;
+      align-items: start;
+    }
+
+    .panel {
+      position: relative;
+      overflow: hidden;
+      background: linear-gradient(180deg, rgba(9, 24, 54, 0.96), rgba(5, 16, 39, 0.98));
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+    }
+
+    .panel::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background:
+        linear-gradient(135deg, rgba(127, 213, 255, 0.10), transparent 35%),
+        linear-gradient(315deg, rgba(217, 181, 109, 0.08), transparent 25%);
+    }
+
+    .panel-inner {
+      position: relative;
+      z-index: 1;
+      padding: 26px;
+    }
+
+    .panel-title {
+      margin: 0 0 6px 0;
+      font-size: 1.45rem;
+      letter-spacing: -0.02em;
+    }
+
+    .panel-subtitle {
+      margin: 0 0 22px 0;
+      color: var(--muted);
+      line-height: 1.6;
+      font-size: 0.97rem;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px 16px;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .field.full {
+      grid-column: 1 / -1;
+    }
+
+    label {
+      color: #d7e4fb;
+      font-size: 0.95rem;
+      letter-spacing: 0.01em;
+    }
+
+    input,
+    select {
+      width: 100%;
+      min-height: 52px;
+      padding: 14px 16px;
+      border-radius: 16px;
+      border: 1px solid rgba(166, 201, 255, 0.18);
+      background: linear-gradient(180deg, rgba(20, 36, 74, 0.97), rgba(11, 25, 53, 0.99));
+      color: #f8fafc;
+      outline: none;
+      font-size: 1rem;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.05),
+        0 0 0 1px rgba(8, 18, 40, 0.24);
+    }
+
+    input::placeholder {
+      color: rgba(226, 232, 240, 0.55);
+    }
+
+    input:hover,
+    select:hover {
+      border-color: rgba(166, 201, 255, 0.30);
+    }
+
+    input:focus,
+    select:focus {
+      border-color: rgba(127, 213, 255, 0.74);
+      box-shadow:
+        0 0 0 3px rgba(127, 213, 255, 0.15),
+        0 0 28px rgba(127, 213, 255, 0.08);
+      transform: translateY(-1px);
+    }
+
+    select {
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      cursor: pointer;
+      padding-right: 46px;
+      background-image:
+        linear-gradient(180deg, rgba(20, 36, 74, 0.97), rgba(11, 25, 53, 0.99)),
+        url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20' fill='none'><path d='M5 7.5L10 12.5L15 7.5' stroke='%23eaf3ff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+      background-repeat: no-repeat, no-repeat;
+      background-position: 0 0, right 14px center;
+      background-size: auto, 18px;
+    }
+
+    select option {
+      background: #14244a;
+      color: #f8fafc;
+    }
+
+    select option[value=""] {
+      color: #d5e2f8;
+    }
+
+    select option:disabled {
+      color: #c0cde3;
+      background: #14244a;
+    }
+
+    .button-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 22px;
+    }
+
+    button {
+      border: 0;
+      border-radius: 14px;
+      min-height: 48px;
+      padding: 0 18px;
+      font-size: 0.98rem;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      cursor: pointer;
+      transition: transform 0.16s ease, box-shadow 0.16s ease, opacity 0.16s ease;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+    }
+
+    .btn-primary {
+      color: #06101f;
+      background: linear-gradient(135deg, #86dcff 0%, #d9b56d 100%);
+      box-shadow: 0 12px 28px rgba(127, 213, 255, 0.16);
+    }
+
+    .btn-secondary {
+      color: #eff6ff;
+      background: rgba(17, 35, 72, 0.82);
+      border: 1px solid rgba(166, 201, 255, 0.16);
+    }
+
+    .status-text {
+      min-height: 24px;
+      margin-top: 14px;
+      color: var(--muted);
+      font-size: 0.96rem;
+    }
+
+    .result-intro {
+      margin: 0 0 18px 0;
+      color: var(--muted);
+      line-height: 1.65;
+      font-size: 0.98rem;
+    }
+
+    .result-card {
+      padding: 18px 18px 16px;
+      border-radius: 18px;
+      border: 1px solid rgba(166, 201, 255, 0.16);
+      background: linear-gradient(180deg, rgba(24, 42, 83, 0.66), rgba(14, 28, 59, 0.82));
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+    }
+
+    .result-label {
+      color: #b9cae8;
+      font-size: 0.96rem;
+      margin-bottom: 8px;
+    }
+
+    .result-value {
+      font-size: 3rem;
+      line-height: 1;
+      font-weight: 800;
+      margin: 0 0 10px 0;
+      letter-spacing: -0.04em;
+    }
+
+    .result-human {
+      font-size: 1.18rem;
+      margin-bottom: 8px;
+    }
+
+    .result-meta {
+      color: var(--muted);
+      font-size: 0.95rem;
+      line-height: 1.55;
+    }
+
+    .result-false {
+      border-color: rgba(244, 67, 54, 0.30);
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.03),
+        0 0 0 1px rgba(244, 67, 54, 0.06);
+    }
+
+    .result-true {
+      border-color: rgba(76, 175, 80, 0.30);
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.03),
+        0 0 0 1px rgba(76, 175, 80, 0.06);
+    }
+
+    .chart-shell {
+      margin-top: 20px;
+      padding: 18px;
+      border-radius: 18px;
+      border: 1px solid rgba(166, 201, 255, 0.14);
+      background: linear-gradient(180deg, rgba(10, 24, 52, 0.76), rgba(7, 18, 40, 0.92));
+    }
+
+    .chart-heading {
+      margin: 0 0 8px 0;
+      font-size: 1rem;
+      color: #deebff;
+    }
+
+    .chart-note {
+      margin: 0 0 16px 0;
+      color: var(--muted);
+      font-size: 0.92rem;
+      line-height: 1.55;
+    }
+
+    .chart-wrap {
+      position: relative;
+      width: 100%;
+      height: 340px;
+      min-height: 340px;
+    }
+
+    .chart-wrap canvas {
+      width: 100% !important;
+      height: 100% !important;
+      display: block;
+    }
+
+    .legend-note {
+      margin-top: 16px;
+      color: var(--muted);
+      font-size: 0.94rem;
+      line-height: 1.6;
+    }
+
+    code {
+      padding: 2px 7px;
+      border-radius: 8px;
+      background: rgba(255,255,255,0.06);
+      color: #eef6ff;
+      font-family: Consolas, Monaco, monospace;
+      font-size: 0.92em;
+    }
+
+    @media (max-width: 980px) {
+      .content-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 700px) {
+      .page-shell {
+        padding: 28px 14px 24px;
+      }
+
+      .panel-inner {
+        padding: 18px;
+      }
+
+      .form-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .result-value {
+        font-size: 2.45rem;
+      }
+
+      .chart-wrap {
+        height: 280px;
+        min-height: 280px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page-shell">
+    <section class="hero">
+      <div class="hero-badge">Azure ML • Titanic Endpoint</div>
+      <h1>{{ app_title | default('Titanic Survival Prediction Form') }}</h1>
+      <p>
+        {{ app_description | default('Submit passenger details to the linked Azure Function, which securely calls the Azure ML online endpoint.') }}
+      </p>
+    </section>
+
+    <section class="content-grid">
+      <div class="panel">
+        <div class="panel-inner">
+          <h2 class="panel-title">Passenger Details</h2>
+          <p class="panel-subtitle">
+            Enter the passenger features below and submit them to the prediction API.
+          </p>
+
+          <form id="predictionForm">
+            <div class="form-grid">
+              <div class="field">
+                <label for="PassengerId">PassengerId</label>
+                <input type="number" id="PassengerId" name="PassengerId" required />
+              </div>
+
+              <div class="field">
+                <label for="Pclass">Pclass</label>
+                <select id="Pclass" name="Pclass" required>
+                  <option value="" selected disabled>Select class</option>
+                  <option value="1">1 - First Class</option>
+                  <option value="2">2 - Second Class</option>
+                  <option value="3">3 - Third Class</option>
+                </select>
+              </div>
+
+              <div class="field full">
+                <label for="Name">Name</label>
+                <input type="text" id="Name" name="Name" required />
+              </div>
+
+              <div class="field">
+                <label for="Sex">Sex</label>
+                <select id="Sex" name="Sex" required>
+                  <option value="" selected disabled>Select sex</option>
+                  <option value="male">male</option>
+                  <option value="female">female</option>
+                </select>
+              </div>
+
+              <div class="field">
+                <label for="Age">Age</label>
+                <input type="number" step="0.1" id="Age" name="Age" />
+              </div>
+
+              <div class="field">
+                <label for="SibSp">SibSp</label>
+                <input type="number" id="SibSp" name="SibSp" required />
+              </div>
+
+              <div class="field">
+                <label for="Parch">Parch</label>
+                <input type="number" id="Parch" name="Parch" required />
+              </div>
+
+              <div class="field">
+                <label for="Ticket">Ticket</label>
+                <input type="text" id="Ticket" name="Ticket" required />
+              </div>
+
+              <div class="field">
+                <label for="Fare">Fare</label>
+                <input type="number" step="0.01" id="Fare" name="Fare" />
+              </div>
+
+              <div class="field">
+                <label for="Cabin">Cabin</label>
+                <input type="text" id="Cabin" name="Cabin" />
+              </div>
+
+              <div class="field">
+                <label for="Embarked">Embarked</label>
+                <select id="Embarked" name="Embarked">
+                  <option value="" selected disabled>Select port</option>
+                  <option value="C">C</option>
+                  <option value="Q">Q</option>
+                  <option value="S">S</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="button-row">
+              <button type="submit" class="btn-primary">Predict</button>
+              <button type="button" class="btn-secondary" id="fillDemoBtn">Fill Demo Data</button>
+              <button type="reset" class="btn-secondary" id="resetBtn">Reset</button>
+            </div>
+
+            <div class="status-text" id="statusText"></div>
+          </form>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-inner">
+          <h2 class="panel-title">Prediction Result</h2>
+          <p class="result-intro">
+            The frontend sends the passenger data to <code>/api/predict</code>.
+            The linked Azure Function converts the form input into the AML payload,
+            calls the deployed Titanic endpoint, and returns the prediction result.
+          </p>
+
+          <div id="resultCard" class="result-card" style="display: none;">
+            <div class="result-label">Boolean Result</div>
+            <div id="resultValue" class="result-value">false</div>
+            <div id="resultHuman" class="result-human"></div>
+            <div id="resultMeta" class="result-meta"></div>
+          </div>
+
+          <div id="chartShell" class="chart-shell" style="display: none;">
+            <h3 class="chart-heading">Prediction Visualization</h3>
+            <p class="chart-note">
+              Visual summary of the returned survival result.
+            </p>
+            <div class="chart-wrap">
+              <canvas id="titanicChart"></canvas>
+            </div>
+          </div>
+
+          <div class="legend-note">
+            Expected meaning: <code>true</code> = survived, <code>false</code> = did not survive.
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const form = document.getElementById("predictionForm");
+    const statusText = document.getElementById("statusText");
+    const resultCard = document.getElementById("resultCard");
+    const resultValue = document.getElementById("resultValue");
+    const resultHuman = document.getElementById("resultHuman");
+    const resultMeta = document.getElementById("resultMeta");
+    const chartShell = document.getElementById("chartShell");
+    const fillDemoBtn = document.getElementById("fillDemoBtn");
+    const resetBtn = document.getElementById("resetBtn");
+
+    let titanicChart = null;
+    let demoIndex = 0;
+
+    const demoSamples = [
+      {
+        PassengerId: 1,
+        Pclass: "3",
+        Name: "Braund, Mr. Owen Harris",
+        Sex: "male",
+        Age: 22,
+        SibSp: 1,
+        Parch: 0,
+        Ticket: "A/5 21171",
+        Fare: 7.25,
+        Cabin: "",
+        Embarked: "S",
+        note: "Demo sample 1 loaded."
+      },
+      {
+        PassengerId: 2,
+        Pclass: "1",
+        Name: "Cumings, Mrs. John Bradley",
+        Sex: "female",
+        Age: 38,
+        SibSp: 1,
+        Parch: 0,
+        Ticket: "PC 17599",
+        Fare: 71.2833,
+        Cabin: "C85",
+        Embarked: "C",
+        note: "Demo sample 2 loaded."
+      },
+      {
+        PassengerId: 3,
+        Pclass: "3",
+        Name: "Heikkinen, Miss. Laina",
+        Sex: "female",
+        Age: 26,
+        SibSp: 0,
+        Parch: 0,
+        Ticket: "STON/O2. 3101282",
+        Fare: 7.925,
+        Cabin: "",
+        Embarked: "S",
+        note: "Demo sample 3 loaded."
+      },
+      {
+        PassengerId: 5,
+        Pclass: "3",
+        Name: "Allen, Mr. William Henry",
+        Sex: "male",
+        Age: 35,
+        SibSp: 0,
+        Parch: 0,
+        Ticket: "373450",
+        Fare: 8.05,
+        Cabin: "",
+        Embarked: "S",
+        note: "Demo sample 4 loaded."
+      }
+    ];
+
+    function getNumberOrNull(id) {
+      const value = document.getElementById(id).value.trim();
+      return value === "" ? null : Number(value);
+    }
+
+    function getStringOrEmpty(id) {
+      return document.getElementById(id).value.trim();
+    }
+
+    function setStatus(message, isError = false) {
+      statusText.textContent = message;
+      statusText.style.color = isError ? "#ffb4b4" : "#b4c6e3";
+    }
+
+    function destroyChartIfExists() {
+      if (titanicChart) {
+        titanicChart.destroy();
+        titanicChart = null;
+      }
+    }
+
+    function setFormValues(sample) {
+      document.getElementById("PassengerId").value = sample.PassengerId;
+      document.getElementById("Pclass").value = sample.Pclass;
+      document.getElementById("Name").value = sample.Name;
+      document.getElementById("Sex").value = sample.Sex;
+      document.getElementById("Age").value = sample.Age;
+      document.getElementById("SibSp").value = sample.SibSp;
+      document.getElementById("Parch").value = sample.Parch;
+      document.getElementById("Ticket").value = sample.Ticket;
+      document.getElementById("Fare").value = sample.Fare;
+      document.getElementById("Cabin").value = sample.Cabin;
+      document.getElementById("Embarked").value = sample.Embarked;
+    }
+
+    function renderChart(prediction) {
+      const survivedCount = prediction === true ? 1 : 0;
+      const didNotSurviveCount = prediction === true ? 0 : 1;
+
+      chartShell.style.display = "block";
+      destroyChartIfExists();
+
+      const ctx = document.getElementById("titanicChart").getContext("2d");
+
+      titanicChart = new Chart(ctx, {
+        type: "pie",
+        data: {
+          labels: ["Survived", "Did Not Survive"],
+          datasets: [{
+            data: [survivedCount, didNotSurviveCount],
+            backgroundColor: ["#4CAF50", "#F44336"],
+            borderColor: ["#388E3C", "#C62828"],
+            borderWidth: 2,
+            hoverBorderWidth: 3
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          layout: {
+            padding: 12
+          },
+          title: {
+            display: true,
+            text: "Titanic Survival Prediction",
+            fontSize: 20,
+            fontColor: "#eaf3ff",
+            padding: 18
+          },
+          legend: {
+            display: true,
+            position: "bottom",
+            labels: {
+              fontColor: "#d7e4fb",
+              fontSize: 14,
+              boxWidth: 34,
+              padding: 18
+            }
+          },
+          tooltips: {
+            callbacks: {
+              label: function(tooltipItem, data) {
+                var dataset = data.datasets[tooltipItem.datasetIndex];
+                var total = dataset.data.reduce(function(a, b) { return a + b; }, 0);
+                var currentValue = dataset.data[tooltipItem.index];
+                var percentage = total > 0 ? ((currentValue / total) * 100).toFixed(1) : "0.0";
+                return data.labels[tooltipItem.index] + ": " + currentValue + " (" + percentage + "%)";
+              }
+            }
+          }
+        }
+      });
+    }
+
+    function renderResult(data) {
+      const prediction = Boolean(data.prediction);
+
+      resultCard.style.display = "block";
+      resultCard.classList.remove("result-true", "result-false");
+      resultCard.classList.add(prediction ? "result-true" : "result-false");
+
+      resultValue.textContent = prediction ? "true" : "false";
+      resultHuman.textContent = data.human_readable || (prediction ? "Likely survived" : "Likely did not survive");
+      resultMeta.textContent = data.message || "Prediction returned from Azure ML endpoint.";
+
+      renderChart(prediction);
+    }
+
+    form.addEventListener("submit", async function(event) {
+      event.preventDefault();
+      setStatus("Submitting request to prediction API...");
+
+      const payload = {
+        PassengerId: getNumberOrNull("PassengerId"),
+        Pclass: getNumberOrNull("Pclass"),
+        Name: getStringOrEmpty("Name"),
+        Sex: getStringOrEmpty("Sex"),
+        Age: getNumberOrNull("Age"),
+        SibSp: getNumberOrNull("SibSp"),
+        Parch: getNumberOrNull("Parch"),
+        Ticket: getStringOrEmpty("Ticket"),
+        Fare: getNumberOrNull("Fare"),
+        Cabin: getStringOrEmpty("Cabin"),
+        Embarked: getStringOrEmpty("Embarked")
+      };
+
+      try {
+        const response = await fetch("/api/predict", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || "Prediction request failed.");
+        }
+
+        renderResult(data);
+        setStatus("Prediction completed.");
+      } catch (error) {
+        destroyChartIfExists();
+        chartShell.style.display = "none";
+        resultCard.style.display = "none";
+        setStatus(error.message || "Unexpected error occurred.", true);
+      }
+    });
+
+    fillDemoBtn.addEventListener("click", function() {
+      const sample = demoSamples[demoIndex];
+      setFormValues(sample);
+      setStatus(sample.note);
+
+      demoIndex += 1;
+      if (demoIndex >= demoSamples.length) {
+        demoIndex = 0;
+      }
+    });
+
+    resetBtn.addEventListener("click", function() {
+      setTimeout(function() {
+        resultCard.style.display = "none";
+        chartShell.style.display = "none";
+        destroyChartIfExists();
+        setStatus("");
+      }, 0);
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,153 @@
+- name: Create and register AML datastore pointing to Azure Blob Storage container
+  hosts: local
+  gather_facts: false
+
+  vars_files:
+    - state/access_key_mlsa.yml
+
+  vars:
+    rg: "{{ resource_group_name }}"
+    storage_account_name: "{{ storage_accounts.ml.name }}"
+    workdir: "./files/project-data"
+    ws: "{{ ml_workspace.name }}"
+
+  tasks:
+    - name: Create AML datastore YAML
+      copy:
+        dest: "{{ workdir }}/datastore_projectdata.yml"
+        mode: "0644"
+        content: |
+          $schema: https://azuremlschemas.azureedge.net/latest/azureBlobDatastore.schema.json
+          name: projectdatastore
+          type: azure_blob
+          account_name: {{ storage_account_name }}
+          container_name: projectdata
+          credentials:
+            account_key: {{ storage_account_key1 }}
+
+    - name: Create/Update AML datastore
+      command: >
+        az ml datastore create
+        -f {{ workdir }}/datastore_projectdata.yml
+        --resource-group {{ rg }}
+        --workspace-name {{ ws }}
+      register: ds_create
+      changed_when: true
+      failed_when: ds_create.rc != 0
+
+    - name: Get Azure subscription ID
+      command: az account show --query id -o tsv
+      register: az_sub
+      changed_when: false
+
+    - name: Build full Azure ML datastore URI for titanic.csv
+      set_fact:
+        titanic_azureml_uri: "azureml://subscriptions/{{ az_sub.stdout }}/resourcegroups/{{ rg | lower }}/workspaces/{{ ws }}/datastores/projectdatastore/paths/projectdata/titanic.csv"
+
+    - name: Show Azure ML datastore URI (titanic.csv)
+      debug:
+        msg: "{{ titanic_azureml_uri }}"
+
+    - name: Set data asset name/version (titanicdata)
+      set_fact:
+        data_asset_name: "titanicdata"
+        data_asset_version: "{{ lookup('pipe','date +%Y%m%d%H%M%S') }}"
+        data_asset_dir: "{{ workdir }}/data-asset"
+
+    - name: Create local folder for YAML and MLTable asset
+      file:
+        path: "{{ data_asset_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Write MLTable referencing Azure ML datastore path
+      copy:
+        dest: "{{ data_asset_dir }}/MLTable"
+        mode: "0644"
+        content: |
+          paths:
+             - file: {{ titanic_azureml_uri }}
+          transformations:
+            - read_delimited:
+                delimiter: ","
+                encoding: "utf8"
+                header: all_files_same_headers
+
+    - name: Write Data Asset YAML (titanicdata)
+      copy:
+        dest: "{{ data_asset_dir }}/dataasset_titanicdata.yml"
+        mode: "0644"
+        content: |
+          $schema: https://azuremlschemas.azureedge.net/latest/data.schema.json
+          name: {{ data_asset_name }}
+          version: {{ data_asset_version }}
+          type: mltable
+          path: {{ data_asset_dir | realpath }}
+          description: Titanic tabular dataset from projectdatastore (titanic.csv)
+
+    - name: Create Data Asset in Azure ML (titanicdata)
+      command: >
+        az ml data create
+        -f {{ data_asset_dir }}/dataasset_titanicdata.yml
+        --resource-group {{ rg }}
+        --workspace-name {{ ws }}
+      register: data_create
+      changed_when: true
+      failed_when: data_create.rc != 0
+
+    - name: Show created data asset (titanicdata)
+      debug:
+        msg: "Created data asset: {{ data_asset_name }}:{{ data_asset_version }}"
+
+    - name: Build full Azure ML datastore URI for temperatures.csv
+      set_fact:
+        temperatures_azureml_uri: "azureml://subscriptions/{{ az_sub.stdout }}/resourcegroups/{{ rg | lower }}/workspaces/{{ ws }}/datastores/projectdatastore/paths/projectdata/temperatures.csv"
+
+    - name: Show Azure ML datastore URI (temperatures.csv)
+      debug:
+        msg: "{{ temperatures_azureml_uri }}"
+
+    - name: Set data asset name/version (temperaturesdata)
+      set_fact:
+        data_asset_name: "temperaturesdata"
+        data_asset_version: "{{ lookup('pipe','date +%Y%m%d%H%M%S') }}"
+        data_asset_dir: "{{ workdir }}/data-asset"
+
+    - name: Write MLTable referencing Azure ML datastore path
+      copy:
+        dest: "{{ data_asset_dir }}/MLTable"
+        mode: "0644"
+        content: |
+          paths:
+             - file: {{ temperatures_azureml_uri }}
+          transformations:
+            - read_delimited:
+                delimiter: ","
+                encoding: "utf8"
+                header: all_files_same_headers
+
+    - name: Write Data Asset YAML (temperaturesdata)
+      copy:
+        dest: "{{ data_asset_dir }}/dataasset_temperaturesdata.yml"
+        mode: "0644"
+        content: |
+          $schema: https://azuremlschemas.azureedge.net/latest/data.schema.json
+          name: {{ data_asset_name }}
+          version: {{ data_asset_version }}
+          type: mltable
+          path: {{ data_asset_dir | realpath }}
+          description: Temperatures tabular dataset from projectdatastore (temperatures.csv)
+
+    - name: Create Data Asset in Azure ML (temperaturesdata)
+      command: >
+        az ml data create
+        -f {{ data_asset_dir }}/dataasset_temperaturesdata.yml
+        --resource-group {{ rg }}
+        --workspace-name {{ ws }}
+      register: data_create
+      changed_when: true
+      failed_when: data_create.rc != 0
+
+    - name: Show created data asset (temperaturesdata)
+      debug:
+        msg: "Created data asset: {{ data_asset_name }}:{{ data_asset_version }}"

@@ -1,0 +1,156 @@
+- name: Azure ML - AutoML Forecasting (Temperatures data)
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    rg: "{{ resource_group_name }}"
+    ws: "{{ ml_workspace.name }}"
+    compute_name: "{{ cluster_state.compute_cluster_4 }}"
+    data_asset_name: "temp-forecast-data"
+    experiment_name: "temp-forecast-exp-{{ lookup('pipe','date +%Y%m%d%H%M%S') }}"
+    job_name: "temp-forecast-job-{{ lookup('pipe','date +%Y%m%d%H%M%S') }}"
+    csv_file: "temperatures.csv"
+    workdir: "./files/project-data/"
+    data_dir: "{{ workdir }}/automl-assets"
+    job_dir: "{{ data_dir }}"
+
+  tasks:
+    - name: Load cluster state
+      set_fact:
+        cluster_state: "{{ lookup('file', './state/cluster_state.yml') | from_yaml }}"
+
+    - name: Ansible variables
+      debug:
+        msg:
+          - "Resource Group = {{ rg }}"
+          - "Work Space = {{ ws }}"
+
+    - name: Create MLTable file for tabular CSV (Delimited, Comma, UTF-8, header in first file)
+      copy:
+        dest: "{{ data_dir }}/MLTable"
+        mode: "0644"
+        content: |
+          paths:
+            - file: {{ csv_file }}
+          transformations:
+            - read_delimited:
+                delimiter: ","
+                encoding: "utf8"
+                header: "from_first_file"
+
+    - name: Show MLTable file
+      command: "cat {{ data_dir }}/MLTable"
+      register: mltable_cat
+      changed_when: false
+
+    - name: Debug MLTable file content
+      debug:
+        var: mltable_cat.stdout_lines
+
+  # -------------------------------------------------------------------
+  # Create/Update Data Asset in AML
+  # -------------------------------------------------------------------
+    - name: Create/Update data asset (MLTable) in AML workspace blob store
+      command: >
+        az ml data create
+        --name {{ data_asset_name }}
+        --version {{ lookup('pipe','date +%Y%m%d%H%M%S') }}
+        --type mltable
+        --path {{ data_dir }}
+        --resource-group {{ rg }}
+        --workspace-name {{ ws }}
+        -o json
+      register: data_create
+      changed_when: true
+
+    - name: Capture data asset version
+      set_fact:
+        data_asset_version: "{{ (data_create.stdout | from_json).version }}"
+
+    - debug:
+        msg:
+          - "Data asset created: {{ data_asset_name }}:{{ data_asset_version }}"
+
+  # -------------------------------------------------------------------
+  # Build AutoML job YAML and submit
+  # -------------------------------------------------------------------
+    - name: Write AutoML job YAML
+      copy:
+        dest: "{{ data_dir }}/automl_temp_forecast_job.yml"
+        mode: "0644"
+        content: |
+          $schema: https://azuremlschemas.azureedge.net/latest/autoMLJob.schema.json
+          type: automl
+
+          name: {{ job_name }}
+          display_name: {{ job_name }}
+          experiment_name: {{ experiment_name }}
+
+          training_data:
+            path: azureml:{{ data_asset_name }}:{{ data_asset_version }}
+            type: mltable
+          
+          task: forecasting
+          primary_metric: normalized_root_mean_squared_error
+          target_column_name: Temperature  
+          n_cross_validations: 5 
+
+          forecasting:
+            time_column_name: Date
+            forecast_horizon: 1
+
+          featurization:
+            mode: auto
+          
+          training:
+             allowed_training_algorithms:
+               - DecisionTree
+               - KNN
+               - RandomForest
+               - LightGBM        
+             enable_model_explainability: true
+             enable_stack_ensemble: false
+             enable_vote_ensemble: false
+
+          limits:
+            max_trials: 4
+            max_concurrent_trials: 1
+            timeout_minutes: 60
+            trial_timeout_minutes: 50
+            enable_early_termination: true
+
+          compute: azureml:{{ compute_name }}
+  
+    - name: Submit AutoML training job
+      command: >
+        az ml job create
+        --file {{ data_dir }}/automl_temp_forecast_job.yml
+        --resource-group {{ rg }}
+        --workspace-name {{ ws }}
+      register: job_submit
+      changed_when: true
+
+    - name: Capture submitted job name
+      set_fact:
+        submitted_job_name_4: "{{ (job_submit.stdout | from_json).name }}"
+
+    - debug:
+        msg: "Submitted job: {{ submitted_job_name_4 }}"
+    
+    - name: Load existing state file if present
+      set_fact:
+        aml_state: "{{ lookup('file', './state/aml_state.yml') | from_yaml }}"
+      ignore_errors: true
+
+    - name: Ensure aml_state exists
+      set_fact:
+        aml_state: "{{ aml_state | default({}) }}"
+
+    - name: Update state with new job name
+      set_fact:
+        aml_state: "{{ aml_state | combine({'submitted_job_name_4': submitted_job_name_4}) }}"
+
+    - name: Save state file
+      copy:
+        dest: ./state/aml_state.yml
+        content: "{{ aml_state | to_nice_yaml }}"

@@ -1,0 +1,55 @@
+- name: Create Azure ML Data Asset (Local upload)
+  hosts: local
+  gather_facts: false
+
+  vars:
+    rg: "{{ resource_group_name }}"
+    ws: "{{ ml_workspace.name }}"
+    data_name: "penguin-data"
+    data_version: "1"
+    workdir: "./files/penguin-data"
+#   web_url: "https://raw.githubusercontent.com/MicrosoftDocs/ml-basics/master/data/penguins.csv"
+    csv_file: "penguins.csv"
+
+  tasks:
+
+    - name: Create working directory
+      file:
+        path: "{{ workdir }}"
+        state: directory
+
+    - name: Create MLTable definition
+      copy:
+        dest: "{{ workdir }}/MLTable"
+        mode: "0644"
+        content: |
+          paths:
+            - file: ./{{ csv_file }}
+          transformations:
+            - read_delimited:
+                delimiter: ","
+                encoding: "utf8"
+                header: from_first_file
+
+    - name: Create data asset YAML
+      copy:
+        dest: "{{ workdir }}/data.yml"
+        mode: "0644"
+        content: |
+          $schema: https://azuremlschemas.azureedge.net/latest/data.schema.json
+          name: "{{ data_name }}"
+          version: "{{ data_version }}"
+          type: mltable
+          description: "Penguin data from local file"
+          path: .
+
+    - name: Create data asset in Azure ML
+      command: >
+        az ml data create
+        --file {{ workdir }}/data.yml
+        --resource-group {{ rg }}
+        --workspace-name {{ ws }}
+      register: result
+
+    - debug:
+        var: result.stdout

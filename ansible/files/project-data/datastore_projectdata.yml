@@ -1,0 +1,7 @@
+$schema: https://azuremlschemas.azureedge.net/latest/azureBlobDatastore.schema.json
+name: projectdatastore
+type: azure_blob
+account_name: REPLACE_WITH_STORAGE_ACCOUNT_NAME
+container_name: projectdata
+credentials:
+  account_key: REPLACE_WITH_STORAGE_ACCOUNT_KEY

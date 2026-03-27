@@ -1,0 +1,54 @@
+- name: Create Azure ML Data Asset
+  hosts: local
+  gather_facts: false
+
+  vars:
+    rg: "{{ resource_group_name }}"
+    ws: "{{ ml_workspace.name }}"
+    data_name: "text-data"
+    data_version: "1"
+    workdir: "./files/text-data"
+    csv_file: "text_data.csv"
+
+  tasks:
+
+    - name: Create working directory
+      file:
+        path: "{{ workdir }}"
+        state: directory
+
+    - name: Create MLTable definition
+      copy:
+        dest: "{{ workdir }}/MLTable"
+        mode: "0644"
+        content: |
+          paths:
+            - file: "{{ csv_file }}"
+          transformations:
+            - read_delimited:
+                delimiter: ","
+                encoding: "utf8"
+                header: from_first_file
+
+    - name: Create data asset YAML
+      copy:
+        dest: "{{ workdir }}/data.yml"
+        mode: "0644"
+        content: |
+          $schema: https://azuremlschemas.azureedge.net/latest/data.schema.json
+          name: "{{ data_name }}"
+          version: "{{ data_version }}"
+          type: mltable
+          description: "Text data from local file"
+          path: .
+
+    - name: Create data asset in Azure ML
+      command: >
+        az ml data create
+        --file {{ workdir }}/data.yml
+        --resource-group {{ rg }}
+        --workspace-name {{ ws }}
+      register: result
+
+    - debug:
+        var: result.stdout

@@ -1,0 +1,30 @@
+{
+  "resource_group_name": "REPLACE_WITH_RESOURCE_GROUP_NAME",
+  "storage_accounts": {
+    "blob": {
+      "id": null,
+      "name": "REPLACE_WITH_BLOB_STORAGE_ACCOUNT_NAME"
+    },
+    "ml": {
+      "id": "/subscriptions/REPLACE_WITH_SUBSCRIPTION_ID/resourceGroups/REPLACE_WITH_RESOURCE_GROUP/providers/Microsoft.Storage/storageAccounts/REPLACE_WITH_ML_STORAGE_ACCOUNT_NAME",
+      "name": "REPLACE_WITH_ML_STORAGE_ACCOUNT_NAME"
+    }
+  },
+  "container_registry": {
+    "id": "/subscriptions/REPLACE_WITH_SUBSCRIPTION_ID/resourceGroups/REPLACE_WITH_RESOURCE_GROUP/providers/Microsoft.ContainerRegistry/registries/REPLACE_WITH_ACR_NAME",
+    "login_server": "REPLACE_WITH_ACR_NAME.azurecr.io",
+    "name": "REPLACE_WITH_ACR_NAME"
+  },
+  "ml_workspace": {
+    "id": "/subscriptions/REPLACE_WITH_SUBSCRIPTION_ID/resourceGroups/REPLACE_WITH_RESOURCE_GROUP/providers/Microsoft.MachineLearningServices/workspaces/REPLACE_WITH_WORKSPACE_NAME",
+    "name": "REPLACE_WITH_WORKSPACE_NAME"
+  },
+  "key_vault": {
+    "id": "/subscriptions/REPLACE_WITH_SUBSCRIPTION_ID/resourceGroups/REPLACE_WITH_RESOURCE_GROUP/providers/Microsoft.KeyVault/vaults/REPLACE_WITH_KEY_VAULT_NAME",
+    "name": "REPLACE_WITH_KEY_VAULT_NAME"
+  },
+  "application_insights": {
+    "id": "/subscriptions/REPLACE_WITH_SUBSCRIPTION_ID/resourceGroups/REPLACE_WITH_RESOURCE_GROUP/providers/Microsoft.Insights/components/REPLACE_WITH_APP_INSIGHTS_NAME",
+    "name": "REPLACE_WITH_APP_INSIGHTS_NAME"
+  }
+}

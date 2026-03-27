@@ -1,0 +1,6 @@
+$schema: https://azuremlschemas.azureedge.net/latest/data.schema.json
+name: "student-data"
+version: "1"
+type: mltable
+description: "Student performance data from local file"
+path: .

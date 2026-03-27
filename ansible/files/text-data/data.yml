@@ -1,0 +1,6 @@
+$schema: https://azuremlschemas.azureedge.net/latest/data.schema.json
+name: "text-data"
+version: "1"
+type: mltable
+description: "Text data from local file"
+path: .

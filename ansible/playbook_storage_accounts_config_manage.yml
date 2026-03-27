@@ -1,0 +1,66 @@
+---
+- name: Configure Blob Storage (containers + uploads)
+  hosts: local
+  gather_facts: false
+
+  vars:
+    storage_account_name: "{{ storage_accounts.ml.name }}"
+    container_name: "projectdata"
+    local_file: "./files/project-data/titanic.csv"
+    local_file_2: "./files/project-data/temperatures.csv"
+    blob_path: "projectdata/titanic.csv"
+    blob_path_2: "projectdata/temperatures.csv"
+
+  tasks:
+    - name: Create private container "projectdata"
+      command: >
+        az storage container create
+        --name {{ container_name }}
+        --account-name {{ storage_account_name }}
+        --public-access off
+        --auth-mode key
+      register: container_create
+      changed_when: "'true' in container_create.stdout"
+      
+    - name: Upload titanic.csv into projectdata folder
+      command: >
+        az storage blob upload
+        --account-name {{ storage_account_name }}
+        --container-name {{ container_name }}
+        --name {{ blob_path }}
+        --file {{ local_file }}
+        --overwrite true
+        --auth-mode key
+      when: true  # to en/disable this step
+
+    - name: Upload temperatures.csv into projectdata folder
+      command: >
+        az storage blob upload
+        --account-name {{ storage_account_name }}
+        --container-name {{ container_name }}
+        --name {{ blob_path_2 }}
+        --file {{ local_file_2 }}
+        --overwrite true
+        --auth-mode key
+      when: true  # to en/disable this step
+    
+    - name: Get storage account access keys
+      command: >
+        az storage account keys list
+        --account-name {{ storage_account_name }}
+        --resource-group {{ resource_group_name }}
+        -o json
+      register: storage_keys
+      changed_when: false
+
+    - name: Set Access Key 1 as fact
+      set_fact:
+        storage_account_key1: "{{ (storage_keys.stdout | from_json)[0].value }}"
+
+    - name: Save storage Access Key 1 to state file
+      copy:
+        dest: ./state/access_key_mlsa.yml
+        mode: "0600"
+        content: |
+          storage_account_name: "{{ storage_account_name }}"
+          storage_account_key1: "{{ storage_account_key1 }}"

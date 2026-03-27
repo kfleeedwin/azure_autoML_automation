@@ -1,0 +1,184 @@
+---
+- name: Deploy managed online endpoints for selected registered models
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    rg: "{{ resource_group_name }}"
+    ws: "{{ ml_workspace.name }}"
+    registered_models_file: "./state/registered_models.yml"
+    online_endpoints_file: "./state/online_endpoint_diabetes.yml"
+
+    endpoint_instance_type: "Standard_D2as_v4"
+    endpoint_instance_count: 1
+
+    # set to one model first until quota is confirmed
+    selected_models:
+      - "diabetes-best-model"
+      # - "bike-rental-best-model"
+      # - "titanic-best-model"
+      # - "temp-forecast-best-model"
+
+  tasks:
+    - name: Load registered models state
+      set_fact:
+        registered_models_state: "{{ lookup('file', registered_models_file) | from_yaml }}"
+
+    - name: Build online deployment plan
+      set_fact:
+        online_models:
+          - model_name: "diabetes-best-model"
+            model_version: "{{ registered_models_state.get('diabetes-best-model', {}).get('model_version', '') }}"
+            endpoint_name: "diabetes-online-endpoint"
+            deployment_name: "blue"
+          - model_name: "bike-rental-best-model"
+            model_version: "{{ registered_models_state.get('bike-rental-best-model', {}).get('model_version', '') }}"
+            endpoint_name: "bike-rental-online-endpoint"
+            deployment_name: "blue"
+          - model_name: "titanic-best-model"
+            model_version: "{{ registered_models_state.get('titanic-best-model', {}).get('model_version', '') }}"
+            endpoint_name: "titanic-online-endpoint"
+            deployment_name: "blue"
+          - model_name: "temp-forecast-best-model"
+            model_version: "{{ registered_models_state.get('temp-forecast-best-model', {}).get('model_version', '') }}"
+            endpoint_name: "temp-forecast-online-endpoint"
+            deployment_name: "blue"
+
+    - name: Filter only selected models
+      set_fact:
+        online_models: "{{ online_models | selectattr('model_name', 'in', selected_models) | list }}"
+
+    - name: Ensure temp online deployment config directory exists
+      file:
+        path: "./files/online_deployment_yamls"
+        state: directory
+        mode: "0755"
+
+    - name: Create online endpoint YAML files
+      copy:
+        dest: "./files/online_deployment_yamls/{{ item.endpoint_name }}-endpoint.yml"
+        mode: "0644"
+        content: |
+          $schema: https://azuremlschemas.azureedge.net/latest/managedOnlineEndpoint.schema.json
+          name: {{ item.endpoint_name }}
+          auth_mode: key
+      loop: "{{ online_models }}"
+      loop_control:
+        label: "{{ item.endpoint_name }}"
+
+    - name: Create online deployment YAML files
+      copy:
+        dest: "./files/online_deployment_yamls/{{ item.endpoint_name }}-deployment.yml"
+        mode: "0644"
+        content: |
+          $schema: https://azuremlschemas.azureedge.net/latest/managedOnlineDeployment.schema.json
+          name: {{ item.deployment_name }}
+          endpoint_name: {{ item.endpoint_name }}
+          model: azureml:{{ item.model_name }}:{{ item.model_version }}
+          instance_type: {{ endpoint_instance_type }}
+          instance_count: {{ endpoint_instance_count }}
+      loop: "{{ online_models }}"
+      loop_control:
+        label: "{{ item.endpoint_name }}"
+
+    - name: Create managed online endpoints
+      command: >
+        az ml online-endpoint create
+        --file ./files/online_deployment_yamls/{{ item.endpoint_name }}-endpoint.yml
+        --resource-group {{ rg }}
+        --workspace-name {{ ws }}
+        -o json
+      loop: "{{ online_models }}"
+      register: online_endpoint_create_raw
+      changed_when: true
+      failed_when: false
+      loop_control:
+        label: "{{ item.endpoint_name }}"
+
+    - name: Create managed online deployments and route all traffic
+      command: >
+        az ml online-deployment create
+        --file ./files/online_deployment_yamls/{{ item.endpoint_name }}-deployment.yml
+        --all-traffic
+        --resource-group {{ rg }}
+        --workspace-name {{ ws }}
+        -o json
+      loop: "{{ online_models }}"
+      register: online_deployment_create_raw
+      changed_when: true
+      failed_when: false
+      loop_control:
+        label: "{{ item.endpoint_name }} -> {{ item.model_name }}"
+
+    - name: Show deployment stderr for failed deployments
+      debug:
+        msg: "{{ item.stderr }}"
+      loop: "{{ online_deployment_create_raw.results }}"
+      when: item.rc is defined and item.rc != 0
+      loop_control:
+        label: "{{ item.item.endpoint_name }}"
+
+    - name: Build successful deployment list
+      set_fact:
+        successful_online_models: "{{ online_deployment_create_raw.results | selectattr('rc', 'equalto', 0) | list }}"
+
+    - name: Get scoring URI for successful deployments
+      command: >
+        az ml online-endpoint show
+        --name {{ item.item.endpoint_name }}
+        --resource-group {{ rg }}
+        --workspace-name {{ ws }}
+        --query scoring_uri
+        -o tsv
+      loop: "{{ successful_online_models }}"
+      register: endpoint_scoring_uri_raw
+      changed_when: false
+      retries: 12
+      delay: 10
+      until: endpoint_scoring_uri_raw.stdout is defined and endpoint_scoring_uri_raw.stdout | length > 0
+      loop_control:
+        label: "{{ item.item.endpoint_name }}"
+
+    - name: Get endpoint credentials for successful deployments
+      command: >
+        az ml online-endpoint get-credentials
+        --name {{ item.item.endpoint_name }}
+        --resource-group {{ rg }}
+        --workspace-name {{ ws }}
+        -o json
+      loop: "{{ successful_online_models }}"
+      register: endpoint_credentials_raw
+      changed_when: false
+      loop_control:
+        label: "{{ item.item.endpoint_name }}"
+
+    - name: Initialize online endpoints state map
+      set_fact:
+        online_endpoints_map: {}
+
+    - name: Build online endpoints state map
+      set_fact:
+        online_endpoints_map: >-
+          {{
+            online_endpoints_map | combine({
+              item.0.item.item.endpoint_name: {
+                'model_name': item.0.item.item.model_name,
+                'model_version': item.0.item.item.model_version,
+                'endpoint_name': item.0.item.item.endpoint_name,
+                'deployment_name': item.0.item.item.deployment_name,
+                'instance_type': endpoint_instance_type,
+                'instance_count': endpoint_instance_count,
+                'scoring_uri': item.1.stdout | default(''),
+                'primary_key': (item.0.stdout | from_json).primaryKey | default('')
+              }
+            })
+          }}
+      loop: "{{ endpoint_credentials_raw.results | zip(endpoint_scoring_uri_raw.results) | list }}"
+      loop_control:
+        label: "{{ item.0.item.item.endpoint_name }}"
+
+    - name: Write online endpoints state file
+      copy:
+        dest: "{{ online_endpoints_file }}"
+        content: "{{ online_endpoints_map | to_nice_yaml }}"
+        mode: "0600"

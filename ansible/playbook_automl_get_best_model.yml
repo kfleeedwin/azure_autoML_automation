@@ -1,0 +1,77 @@
+---
+- name: Get best AutoML child runs
+  hosts: local
+  gather_facts: false
+
+  vars:
+    rg: "{{ resource_group_name }}"
+    ws: "{{ ml_workspace.name }}"
+    aml_state_file: "./state/aml_state.yml"
+    best_model_file: "./state/best_model.yml"
+
+  tasks:
+    - name: Load AML state
+      set_fact:
+        aml_state: "{{ lookup('file', aml_state_file) | from_yaml }}"
+
+    - name: Build parent job list with stable numbering
+      set_fact:
+        parent_jobs:
+          - { key: "best_child_run_id_1", job: "{{ aml_state.submitted_job_name_1 | default('') }}" }
+          - { key: "best_child_run_id_2", job: "{{ aml_state.submitted_job_name_2 | default('') }}" }
+          - { key: "best_child_run_id_3", job: "{{ aml_state.submitted_job_name_3 | default('') }}" }
+          - { key: "best_child_run_id_4", job: "{{ aml_state.submitted_job_name_4 | default('') }}" }
+
+    - name: Remove empty parent job entries
+      set_fact:
+        parent_jobs: "{{ parent_jobs | rejectattr('job', 'equalto', '') | list }}"
+
+    - name: Show parent jobs to check
+      debug:
+        var: parent_jobs
+
+    - name: Get parent job information for each AutoML job
+      command: >
+        az ml job show
+        --name {{ item.job }}
+        --resource-group {{ rg }}
+        --workspace-name {{ ws }}
+        -o json
+      loop: "{{ parent_jobs }}"
+      register: parent_job_raw
+      changed_when: false
+      loop_control:
+        label: "{{ item.key }} -> {{ item.job }}"
+
+    - name: Initialize best run map
+      set_fact:
+        best_run_map: {}
+
+    - name: Build numbered best child run map
+      set_fact:
+        best_run_map: >-
+          {{
+            best_run_map | combine({
+              item.item.key: (
+                ((item.stdout | from_json).properties.automl_best_child_run_id)
+                | default((item.stdout | from_json).tags.automl_best_child_run_id, true)
+              )
+            })
+          }}
+      loop: "{{ parent_job_raw.results }}"
+      loop_control:
+        label: "{{ item.item.key }}"
+
+    - name: Show best child run map
+      debug:
+        var: best_run_map
+
+    - name: Write best child runs to YAML file
+      copy:
+        dest: "{{ best_model_file }}"
+        content: "{{ best_run_map | to_nice_yaml }}"
+        mode: "0644"
+
+    - name: Confirm output file
+      debug:
+        msg: "Best model file written to {{ best_model_file }}"

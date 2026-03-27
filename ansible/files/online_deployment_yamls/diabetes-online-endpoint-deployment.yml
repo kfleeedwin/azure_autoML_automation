@@ -1,0 +1,6 @@
+$schema: https://azuremlschemas.azureedge.net/latest/managedOnlineDeployment.schema.json
+name: blue
+endpoint_name: diabetes-online-endpoint
+model: azureml:diabetes-best-model:1
+instance_type: Standard_D2as_v4
+instance_count: 1

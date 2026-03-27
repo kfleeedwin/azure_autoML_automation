@@ -1,0 +1,7 @@
+paths:
+  - file: temperatures.csv
+transformations:
+  - read_delimited:
+      delimiter: ","
+      encoding: "utf8"
+      header: "from_first_file"

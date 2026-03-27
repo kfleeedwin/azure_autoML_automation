@@ -1,0 +1,726 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ app_title }}</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --bg-1: #04111f;
+      --bg-2: #08233d;
+      --panel: rgba(8, 27, 49, 0.78);
+      --panel-2: rgba(13, 39, 70, 0.92);
+      --line: rgba(83, 177, 255, 0.22);
+      --text: #eaf6ff;
+      --muted: #a9c7de;
+      --accent: #48c7ff;
+      --accent-2: #19e3b1;
+      --good: #19b56f;
+      --bad: #c74444;
+      --shadow: 0 24px 70px rgba(0, 0, 0, 0.4);
+      --radius: 24px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      font-family: Inter, "Segoe UI", Roboto, Arial, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 15% 20%, rgba(25, 227, 177, 0.12), transparent 28%),
+        radial-gradient(circle at 85% 12%, rgba(72, 199, 255, 0.14), transparent 24%),
+        linear-gradient(135deg, var(--bg-1) 0%, #04182e 40%, var(--bg-2) 100%);
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.18;
+      background-image:
+        linear-gradient(rgba(110, 198, 255, 0.1) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(110, 198, 255, 0.1) 1px, transparent 1px);
+      background-size: 36px 36px;
+      mask-image: linear-gradient(to bottom, rgba(0,0,0,0.9), rgba(0,0,0,0.25));
+    }
+
+    body::after {
+      content: "";
+      position: fixed;
+      inset: auto 0 12% 0;
+      height: 120px;
+      pointer-events: none;
+      opacity: 0.22;
+      background:
+        url("data:image/svg+xml;utf8,\
+<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 120'>\
+<path d='M0 70 L120 70 L170 70 L205 22 L245 102 L290 70 L420 70 L465 70 L495 40 L525 86 L560 70 L1200 70' fill='none' stroke='%2348c7ff' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/>\
+</svg>") center / cover no-repeat;
+      filter: drop-shadow(0 0 14px rgba(72, 199, 255, 0.4));
+    }
+
+    .shell {
+      width: min(1100px, calc(100% - 32px));
+      margin: 42px auto;
+      position: relative;
+      z-index: 1;
+    }
+
+    .hero {
+      position: relative;
+      overflow: hidden;
+      padding: 34px 36px;
+      border: 1px solid var(--line);
+      border-radius: 30px;
+      background: linear-gradient(180deg, rgba(10, 33, 60, 0.88), rgba(8, 24, 45, 0.82));
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
+    }
+
+    .hero::before {
+      content: "";
+      position: absolute;
+      right: -90px;
+      top: -90px;
+      width: 260px;
+      height: 260px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(25, 227, 177, 0.22), transparent 68%);
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      left: -50px;
+      bottom: -50px;
+      width: 180px;
+      height: 180px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(72, 199, 255, 0.2), transparent 70%);
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+      padding: 8px 14px;
+      border: 1px solid rgba(72, 199, 255, 0.22);
+      border-radius: 999px;
+      background: rgba(6, 20, 37, 0.52);
+      color: #bfe9ff;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .eyebrow::before {
+      content: "✚";
+      color: var(--accent-2);
+      font-size: 14px;
+    }
+
+    h1 {
+      margin: 0 0 12px;
+      font-size: clamp(2rem, 4vw, 3.4rem);
+      line-height: 1.04;
+      letter-spacing: -0.03em;
+    }
+
+    .hero p {
+      margin: 0;
+      max-width: 760px;
+      color: var(--muted);
+      font-size: 1.04rem;
+      line-height: 1.65;
+    }
+
+    .hero .sub {
+      margin-top: 16px;
+      color: #d6f5ff;
+      font-size: 0.96rem;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 24px;
+      margin-top: 24px;
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: linear-gradient(180deg, var(--panel), var(--panel-2));
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
+    }
+
+    .form-card {
+      padding: 28px;
+    }
+
+    .side-card {
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .section-title {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 0 0 20px;
+      font-size: 1.15rem;
+      font-weight: 800;
+    }
+
+    .section-title .icon {
+      width: 38px;
+      height: 38px;
+      display: inline-grid;
+      place-items: center;
+      border-radius: 14px;
+      background: linear-gradient(135deg, rgba(72, 199, 255, 0.22), rgba(25, 227, 177, 0.18));
+      border: 1px solid rgba(72, 199, 255, 0.24);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.03);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px 16px;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .field.full {
+      grid-column: 1 / -1;
+    }
+
+    label {
+      font-size: 0.96rem;
+      font-weight: 700;
+      color: #def4ff;
+    }
+
+    .hint {
+      color: #8eb1c7;
+      font-size: 0.82rem;
+      margin-top: -2px;
+    }
+
+    input {
+      width: 100%;
+      height: 56px;
+      border: 1px solid rgba(72, 199, 255, 0.2);
+      border-radius: 16px;
+      padding: 0 16px;
+      outline: none;
+      color: #f4fbff;
+      background: rgba(2, 15, 30, 0.78);
+      font-size: 1rem;
+      transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+    }
+
+    input::placeholder {
+      color: #6f90a9;
+    }
+
+    input:focus {
+      border-color: rgba(72, 199, 255, 0.55);
+      box-shadow: 0 0 0 4px rgba(72, 199, 255, 0.12);
+      transform: translateY(-1px);
+    }
+
+    .actions {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-top: 12px;
+    }
+
+    button {
+      appearance: none;
+      border: 0;
+      min-width: 180px;
+      height: 54px;
+      padding: 0 22px;
+      border-radius: 16px;
+      font-size: 1rem;
+      font-weight: 800;
+      color: #031525;
+      cursor: pointer;
+      background: linear-gradient(135deg, #4dd2ff, #2db4f0 55%, #1ae3b0);
+      box-shadow: 0 14px 30px rgba(29, 158, 214, 0.32);
+      transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.04);
+      box-shadow: 0 18px 34px rgba(29, 158, 214, 0.38);
+    }
+
+    button:active {
+      transform: translateY(0);
+    }
+
+    button:disabled {
+      cursor: wait;
+      opacity: 0.72;
+      filter: grayscale(0.1);
+    }
+
+    .status {
+      color: #9fc4db;
+      font-size: 0.92rem;
+    }
+
+    .metric {
+      display: grid;
+      grid-template-columns: 48px 1fr;
+      gap: 14px;
+      align-items: start;
+      padding: 14px 0;
+      border-top: 1px solid rgba(72, 199, 255, 0.12);
+    }
+
+    .metric:first-of-type {
+      border-top: 0;
+      padding-top: 0;
+    }
+
+    .metric-icon {
+      width: 48px;
+      height: 48px;
+      display: grid;
+      place-items: center;
+      border-radius: 16px;
+      font-size: 1.2rem;
+      background: rgba(5, 20, 36, 0.8);
+      border: 1px solid rgba(72, 199, 255, 0.16);
+      color: #b6eaff;
+    }
+
+    .metric h3 {
+      margin: 0 0 4px;
+      font-size: 0.98rem;
+    }
+
+    .metric p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.9rem;
+      line-height: 1.5;
+    }
+
+    .result {
+      margin-top: 22px;
+      padding: 18px 18px 16px;
+      border-radius: 20px;
+      border: 1px solid rgba(255,255,255,0.05);
+      background: rgba(5, 18, 33, 0.7);
+      display: none;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .result.show {
+      display: block;
+    }
+
+    .result.success {
+      background: linear-gradient(180deg, rgba(13, 84, 43, 0.92), rgba(10, 67, 36, 0.94));
+      border-color: rgba(54, 202, 122, 0.25);
+    }
+
+    .result.error {
+      background: linear-gradient(180deg, rgba(116, 25, 25, 0.92), rgba(94, 18, 18, 0.95));
+      border-color: rgba(255, 98, 98, 0.24);
+    }
+
+    .result-title {
+      margin: 0 0 8px;
+      font-size: 1.1rem;
+      font-weight: 800;
+    }
+
+    .result-meta {
+      margin: 0 0 8px;
+      color: #e6f6ff;
+      line-height: 1.55;
+      font-weight: 650;
+    }
+
+    .result-raw {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px dashed rgba(255,255,255,0.14);
+      color: #eaf6ff;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.92rem;
+    }
+
+    .prediction-pill {
+      display: inline-block;
+      margin: 0 0 14px;
+      padding: 10px 18px;
+      border-radius: 999px;
+      font-weight: 800;
+      color: #fff;
+    }
+
+    .prediction-pill.diabetic {
+      background: linear-gradient(135deg, #e74c3c, #c0392b);
+    }
+
+    .prediction-pill.not-diabetic {
+      background: linear-gradient(135deg, #2ecc71, #27ae60);
+    }
+
+    .chart-shell {
+      margin-top: 18px;
+      padding: 18px;
+      border-radius: 18px;
+      background: rgba(3, 16, 30, 0.45);
+      border: 1px solid rgba(72, 199, 255, 0.12);
+    }
+
+    .chart-title {
+      margin: 0 0 14px;
+      font-size: 1rem;
+      font-weight: 800;
+      color: #eaf6ff;
+    }
+
+    .chart-wrap {
+      width: 100%;
+      max-width: 320px;
+      margin: 0 auto;
+    }
+
+    .pulse {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: #a3dfff;
+      font-size: 0.9rem;
+      margin-top: 10px;
+    }
+
+    .pulse-line {
+      width: 52px;
+      height: 10px;
+      background:
+        url("data:image/svg+xml;utf8,\
+<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 16'>\
+<path d='M0 8 L24 8 L34 8 L40 2 L48 14 L57 8 L80 8 L120 8' fill='none' stroke='%2319e3b1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/>\
+</svg>") center / contain no-repeat;
+      filter: drop-shadow(0 0 8px rgba(25, 227, 177, 0.45));
+    }
+
+    @media (max-width: 920px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .shell {
+        width: min(100% - 18px, 1100px);
+        margin: 18px auto 28px;
+      }
+
+      .hero, .form-card, .side-card {
+        padding: 20px;
+      }
+
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
+      button {
+        width: 100%;
+      }
+
+      .actions {
+        flex-direction: column;
+        align-items: stretch;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="hero">
+      <div class="eyebrow">Clinical Screening Interface</div>
+      <h1>{{ app_title }}</h1>
+      <p>{{ app_description }}</p>
+      <p class="sub">Secure browser form → linked Azure Function → Azure ML online endpoint.</p>
+    </section>
+
+    <section class="layout">
+      <section class="card form-card">
+        <h2 class="section-title">
+          <span class="icon">🩺</span>
+          Patient Assessment Input
+        </h2>
+
+        <form id="prediction-form">
+          <div class="grid">
+            <div class="field">
+              <label for="PatientID">Patient ID</label>
+              <input id="PatientID" name="PatientID" type="number" required placeholder="e.g. 1354778">
+            </div>
+
+            <div class="field">
+              <label for="Pregnancies">Pregnancies</label>
+              <input id="Pregnancies" name="Pregnancies" type="number" required placeholder="e.g. 2">
+            </div>
+
+            <div class="field">
+              <label for="PlasmaGlucose">Plasma Glucose</label>
+              <input id="PlasmaGlucose" name="PlasmaGlucose" type="number" step="any" required placeholder="e.g. 120">
+            </div>
+
+            <div class="field">
+              <label for="DiastolicBloodPressure">Diastolic Blood Pressure</label>
+              <input id="DiastolicBloodPressure" name="DiastolicBloodPressure" type="number" step="any" required placeholder="e.g. 70">
+            </div>
+
+            <div class="field">
+              <label for="TricepsThickness">Triceps Thickness</label>
+              <input id="TricepsThickness" name="TricepsThickness" type="number" step="any" required placeholder="e.g. 20">
+            </div>
+
+            <div class="field">
+              <label for="SerumInsulin">Serum Insulin</label>
+              <input id="SerumInsulin" name="SerumInsulin" type="number" step="any" required placeholder="e.g. 85">
+            </div>
+
+            <div class="field">
+              <label for="BMI">BMI</label>
+              <input id="BMI" name="BMI" type="number" step="any" required placeholder="e.g. 31.5">
+            </div>
+
+            <div class="field">
+              <label for="DiabetesPedigree">Diabetes Pedigree</label>
+              <input id="DiabetesPedigree" name="DiabetesPedigree" type="number" step="any" required placeholder="e.g. 0.42">
+            </div>
+
+            <div class="field full">
+              <label for="Age">Age</label>
+              <input id="Age" name="Age" type="number" required placeholder="e.g. 33">
+              <div class="hint">All values are sent to the backend as structured JSON for scoring.</div>
+            </div>
+          </div>
+
+          <div class="actions">
+            <button id="submit-btn" type="submit">Run Prediction</button>
+            <div id="status-text" class="status">Ready for assessment.</div>
+          </div>
+        </form>
+
+        <div id="result" class="result" aria-live="polite"></div>
+      </section>
+
+      <aside class="card side-card">
+        <h2 class="section-title">
+          <span class="icon">🏥</span>
+          Medical Context
+        </h2>
+
+        <div class="metric">
+          <div class="metric-icon">🧪</div>
+          <div>
+            <h3>Lab-driven signals</h3>
+            <p>Glucose, insulin, BMI, and blood pressure can be combined into a fast clinical triage view.</p>
+          </div>
+        </div>
+
+        <div class="metric">
+          <div class="metric-icon">📈</div>
+          <div>
+            <h3>Model-backed output</h3>
+            <p>The prediction is generated by an Azure ML online endpoint through a secured Azure Function backend.</p>
+          </div>
+        </div>
+
+        <div class="metric">
+          <div class="metric-icon">🛡️</div>
+          <div>
+            <h3>Protected architecture</h3>
+            <p>The AML key is never exposed in the browser. Client requests only talk to the linked backend route.</p>
+          </div>
+        </div>
+
+        <div class="pulse">
+          <span class="pulse-line"></span>
+          <span>Endpoint health routed through <code>/api/predict</code></span>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+  <script>
+    const form = document.getElementById("prediction-form");
+    const resultBox = document.getElementById("result");
+    const submitBtn = document.getElementById("submit-btn");
+    const statusText = document.getElementById("status-text");
+    let predictionChart = null;
+
+    function renderPredictionChart(isDiabetic) {
+      const canvas = document.getElementById("predictionChart");
+      if (!canvas) return;
+
+      const diabeticValue = isDiabetic ? 1 : 0.1;
+      const notDiabeticValue = isDiabetic ? 0.1 : 1;
+
+      if (predictionChart) {
+        predictionChart.destroy();
+      }
+
+      const ctx = canvas.getContext("2d");
+
+      predictionChart = new Chart(ctx, {
+        type: "doughnut",
+        data: {
+          labels: ["Diabetic", "Not Diabetic"],
+          datasets: [{
+            data: [diabeticValue, notDiabeticValue],
+            backgroundColor: ["#e74c3c", "#2ecc71"],
+            borderColor: ["#c0392b", "#27ae60"],
+            borderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: {
+              display: true,
+              position: "bottom",
+              labels: {
+                color: "#dcefff",
+                font: {
+                  size: 13
+                }
+              }
+            }
+          },
+          cutout: "62%"
+        }
+      });
+    }
+
+    function renderResult(data, isError = false) {
+      resultBox.className = "result show " + (isError ? "error" : "success");
+
+      if (isError) {
+        const message = typeof data === "string" ? data : (data?.error || "Unknown error");
+        resultBox.innerHTML = `
+          <div class="result-title">Request Failed</div>
+          <div class="result-meta">${message}</div>
+        `;
+        return;
+      }
+
+      const prediction = data?.prediction;
+      const label = data?.label ?? "n/a";
+      const amlEndpoint = data?.aml_endpoint ?? "n/a";
+      const model = data?.model ?? "n/a";
+      const modelVersion = data?.model_version ?? "n/a";
+      const raw = JSON.stringify(data?.raw, null, 2);
+
+      const isDiabetic = prediction === true;
+      const predictionLabel = isDiabetic ? "Diabetic" : "Not Diabetic";
+      const predictionClass = isDiabetic ? "diabetic" : "not-diabetic";
+
+      resultBox.innerHTML = `
+        <div class="result-title">Prediction Result</div>
+        <div class="prediction-pill ${predictionClass}">Prediction: ${predictionLabel}</div>
+        <div class="result-meta">
+          Label: ${label}<br>
+          AML endpoint: ${amlEndpoint}<br>
+          Model: ${model}<br>
+          Model version: ${modelVersion}
+        </div>
+
+        <div class="chart-shell">
+          <div class="chart-title">Prediction Distribution</div>
+          <div class="chart-wrap">
+            <canvas id="predictionChart"></canvas>
+          </div>
+        </div>
+
+        <div class="result-raw">${raw}</div>
+      `;
+
+      renderPredictionChart(isDiabetic);
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+
+      const payload = {
+        PatientID: Number(document.getElementById("PatientID").value),
+        Pregnancies: Number(document.getElementById("Pregnancies").value),
+        PlasmaGlucose: Number(document.getElementById("PlasmaGlucose").value),
+        DiastolicBloodPressure: Number(document.getElementById("DiastolicBloodPressure").value),
+        TricepsThickness: Number(document.getElementById("TricepsThickness").value),
+        SerumInsulin: Number(document.getElementById("SerumInsulin").value),
+        BMI: Number(document.getElementById("BMI").value),
+        DiabetesPedigree: Number(document.getElementById("DiabetesPedigree").value),
+        Age: Number(document.getElementById("Age").value)
+      };
+
+      submitBtn.disabled = true;
+      statusText.textContent = "Submitting metrics to secure scoring backend...";
+      resultBox.className = "result";
+      resultBox.innerHTML = "";
+
+      try {
+        const response = await fetch("/api/predict", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const rawText = await response.text();
+        let data = null;
+
+        try {
+          data = rawText ? JSON.parse(rawText) : null;
+        } catch {
+          throw new Error(`Backend did not return JSON. HTTP ${response.status}. Body: ${rawText || "<empty>"}`);
+        }
+
+        if (!response.ok) {
+          throw new Error(data?.error || `Request failed with HTTP ${response.status}`);
+        }
+
+        renderResult(data, false);
+        statusText.textContent = "Prediction completed.";
+      } catch (error) {
+        renderResult(error.message, true);
+        statusText.textContent = "Prediction failed.";
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

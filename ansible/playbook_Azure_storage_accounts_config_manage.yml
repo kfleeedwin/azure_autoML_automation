@@ -1,0 +1,102 @@
+---
+- name: Configure Blob Storage (containers + uploads)
+  hosts: local
+  gather_facts: false
+
+  vars:
+    storage_account_name: "replace-with-storage-account-name"
+    container_name: "data"
+    container_name_2: "images"
+    local_file: "../files/store-camera-1.jpg"
+    blob_path: "images/store-camera-1.jpg"
+
+# Storage accounts
+    sa_standard: "replace-with-standard-storage-account"
+    sa_gen2: "replace-with-adls-gen2-storage-account"
+
+    table_name: "products"
+
+  tasks:
+    - name: Create private container "data"
+      command: >
+        az storage container create
+        --name {{ container_name }}
+        --account-name {{ storage_account_name }}
+        --public-access off
+        --auth-mode key
+      register: container_create
+      changed_when: "'true' in container_create.stdout"
+      
+    - name: Upload product1.json into product_data folder
+      command: >
+        az storage blob upload
+        --account-name {{ storage_account_name }}
+        --container-name {{ container_name }}
+        --name {{ blob_path }}
+        --file {{ local_file }}
+        --overwrite true
+        --auth-mode key
+
+    - name: Create private container "images"
+      command: >
+        az storage container create
+        --name {{ container_name_2 }}
+        --account-name {{ storage_account_name }}
+        --public-access off
+        --auth-mode key
+      register: container_create
+      changed_when: "'true' in container_create.stdout"
+
+    - name: Upload file into folder
+      command: >
+        az storage blob upload
+        --account-name {{ storage_account_name }}
+        --container-name {{ container_name_2 }}
+        --name {{ blob_path }}
+        --file {{ local_file }}
+        --overwrite true
+        --auth-mode key
+   
+    - name: Insert entity (PK=1, RK=1) into products table (standard storage account)
+      command: >
+        az storage entity insert
+        --account-name {{ sa_standard }}
+        --table-name {{ table_name }}
+        --entity PartitionKey=1 RowKey=1 Name=Widget Price@odata.type=Edm.Double Price=2.99
+        --auth-mode key
+      register: insert_std_1
+      changed_when: insert_std_1.rc == 0
+      failed_when: insert_std_1.rc != 0 and ("already exists" not in insert_std_1.stderr | lower)
+
+    - name: Insert entity (PK=1, RK=1) into products table (ADLS Gen2 storage account)
+      command: >
+        az storage entity insert
+        --account-name {{ sa_gen2 }}
+        --table-name {{ table_name }}
+        --entity PartitionKey=1 RowKey=1 Name=Widget Price@odata.type=Edm.Double Price=2.99
+        --auth-mode key
+      register: insert_gen2_1
+      changed_when: insert_gen2_1.rc == 0
+      failed_when: insert_gen2_1.rc != 0 and ("already exists" not in insert_gen2_1.stderr | lower)
+
+    - name: Insert entity (PK=1, RK=2) into products table (standard storage account)
+      command: >
+        az storage entity insert
+        --account-name {{ sa_standard }}
+        --table-name {{ table_name }}
+        --entity PartitionKey=1 RowKey=2 Name=Kniknak Price@odata.type=Edm.Double Price=1.99 Discontinued@odata.type=Edm.Boolean Discontinued=true
+        --auth-mode key
+      register: insert_std_2
+      changed_when: insert_std_2.rc == 0
+      failed_when: insert_std_2.rc != 0 and ("already exists" not in insert_std_2.stderr | lower)
+
+    - name: Insert entity (PK=1, RK=2) into products table (ADLS Gen2 storage account)
+      command: >
+        az storage entity insert
+        --account-name {{ sa_gen2 }}
+        --table-name {{ table_name }}
+        --entity PartitionKey=1 RowKey=2 Name=Kniknak Price@odata.type=Edm.Double Price=1.99 Discontinued@odata.type=Edm.Boolean Discontinued=true
+        --auth-mode key
+      register: insert_gen2_2
+      changed_when: insert_gen2_2.rc == 0
+      failed_when: insert_gen2_2.rc != 0 and ("already exists" not in insert_gen2_2.stderr | lower)

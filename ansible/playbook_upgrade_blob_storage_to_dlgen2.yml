@@ -1,0 +1,47 @@
+---
+- name: Upgrade Blob Storage to ADLS Gen2 (HNS migration) + upload
+  hosts: local
+  gather_facts: false
+
+  vars:
+    storage_account_name: "{{ storage_accounts.blob.name }}"
+    container_name: "data"                 # becomes filesystem after upgrade
+    local_file: "./files/project-data/titanic.csv"
+    dfs_path: "titanicdata/titanic.csv"
+    rg: "{{ resource_group_name }}"
+
+  tasks:
+    # Validate upgrade readiness (fails if incompatible features exist)
+    - name: Validate storage account for HNS migration
+      command: >
+        az storage account hns-migration start
+        --type validation
+        --name {{ storage_account_name }}
+        --resource-group {{ rg }}
+      register: hns_validate
+      changed_when: true
+      failed_when: hns_validate.rc != 0
+
+    # Start upgrade process
+    - name: Start HNS upgrade (Data Lake Gen2 upgrade)
+      command: >
+        az storage account hns-migration start
+        --type upgrade
+        --name {{ storage_account_name }}
+        --resource-group {{ rg }}
+      register: hns_upgrade
+      changed_when: true
+      failed_when: hns_upgrade.rc != 0
+
+    # Verify upgrade completed (HNS enabled)
+    - name: Wait until isHnsEnabled becomes true
+      command: >
+        az storage account show
+        --name {{ storage_account_name }}
+        --resource-group {{ rg }}
+        --query isHnsEnabled -o tsv
+      register: hns_flag
+      changed_when: false
+      retries: 60
+      delay: 30
+      until: hns_flag.stdout | lower == "true"

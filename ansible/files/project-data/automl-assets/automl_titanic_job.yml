@@ -1,0 +1,38 @@
+$schema: https://azuremlschemas.azureedge.net/latest/autoMLJob.schema.json
+type: automl
+
+name: titanic-job-20260320043950
+display_name: titanic-job-20260320043950
+experiment_name: titanic-exp-20260320043950
+
+task: classification
+primary_metric: accuracy
+target_column_name: Survived
+
+training_data:
+  path: azureml:titanic-data:20260320043937
+  type: mltable
+
+validation_data_size: 0.1
+
+featurization: 
+  mode: auto
+
+training:
+   allowed_training_algorithms:
+     - RandomForest
+     - LightGBM
+     - LogisticRegression
+     - DecisionTree          
+   enable_model_explainability: true     
+   enable_stack_ensemble: false
+   enable_vote_ensemble: false
+
+limits:
+  max_trials: 4
+  max_concurrent_trials: 1
+  timeout_minutes: 60
+  trial_timeout_minutes: 50
+  enable_early_termination: true
+
+compute: azureml:e2s-v3-cpu-cluster

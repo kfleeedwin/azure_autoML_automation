@@ -1,0 +1,45 @@
+- name: Azure ML Workspace - Create Compute Instance
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    rg: "{{ resource_group_name }}"
+    ws: "{{ ml_workspace.name }}"
+    instance_name: "ci-{{ ws | lower | regex_replace('[^a-z0-9-]', '-') | truncate(18, True, '') }}"
+    vm_size: "Standard_D2_v3"   # standardDv3Family - 2 cores, 8 GB RAM
+  
+  tasks:
+    - name: Ansible variables
+      debug:
+        msg:
+          - "Resource Group = {{ rg }}"
+          - "Work Space     = {{ ws }}"
+
+    - name: Check if AML compute instance exists
+      command: >
+        az ml compute show
+        -g {{ rg }}
+        -w {{ ws }}
+        -n {{ instance_name }}
+      register: instance_check
+      changed_when: false
+      failed_when: false
+      tags: [create_instance]
+
+    - name: Create AML compute instance if missing
+      command: >
+        az ml compute create
+        -g {{ rg }}
+        -w {{ ws }}
+        -n {{ instance_name }}
+        --type ComputeInstance
+        --size {{ vm_size }}
+      when: instance_check.rc != 0
+      tags: [create_instance]
+
+    - name: Show result
+      debug:
+        msg:
+          - "compute show rc={{ instance_check.rc }}"
+          - "Created Compute Instance only if rc != 0"
+      tags: [create_instance]

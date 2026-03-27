@@ -1,0 +1,41 @@
+$schema: https://azuremlschemas.azureedge.net/latest/autoMLJob.schema.json
+type: automl
+
+name: temp-forecast-job-20260320044016
+display_name: temp-forecast-job-20260320044016
+experiment_name: temp-forecast-exp-20260320044016
+
+training_data:
+  path: azureml:temp-forecast-data:20260320044003
+  type: mltable
+
+task: forecasting
+primary_metric: normalized_root_mean_squared_error
+target_column_name: Temperature  
+n_cross_validations: 5 
+
+forecasting:
+  time_column_name: Date
+  forecast_horizon: 1
+
+featurization:
+  mode: auto
+
+training:
+   allowed_training_algorithms:
+     - DecisionTree
+     - KNN
+     - RandomForest
+     - LightGBM        
+   enable_model_explainability: true
+   enable_stack_ensemble: false
+   enable_vote_ensemble: false
+
+limits:
+  max_trials: 4
+  max_concurrent_trials: 1
+  timeout_minutes: 60
+  trial_timeout_minutes: 50
+  enable_early_termination: true
+
+compute: azureml:d2s-v3-cpu-cluster
