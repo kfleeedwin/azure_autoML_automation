@@ -82,4 +82,8 @@ terraform -chdir=terraform init
 - Review any script that writes local state before using it in CI or on a shared workstation.
 - Treat online endpoint primary keys and datastore keys as secrets.
 
+## License
+
+This repository is released under the MIT License. See `LICENSE` for details.
+
 Additional details are documented in `ansible/README.md`, `terraform/README.md`, `python/README.md`, and `bash/README.md`.
