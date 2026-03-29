@@ -6,7 +6,7 @@ module "sa" {
 }
 
 module "ml" {
-  source                      = "./modules/ml"
-  subscription_id             = var.subscription_id
-  location                    = var.location
+  source          = "./modules/ml"
+  subscription_id = var.subscription_id
+  location        = var.location
 }
